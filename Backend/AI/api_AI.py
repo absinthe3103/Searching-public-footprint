@@ -2,7 +2,7 @@
 api_AI.py
 Orchestrates the full pipeline:
   1. Run candidate_searcher to collect public profile data
-  2. Send collected data to Claude AI for 9-dimension scoring
+  2. Send collected data to an LLM backend (OpenRouter or local Ollama) for 9-dimension scoring
   3. Save candidate name + rescoring score to DB
 
 9 Scoring Dimensions (0-100 each):
@@ -24,6 +24,10 @@ import requests
 import time
 import re
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # ── Import siblings ──────────────────────────────────────
 _BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(_BACKEND, "database"))
@@ -31,9 +35,14 @@ sys.path.insert(0, os.path.join(_BACKEND, "src"))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from db import insert_candidate, get_all_candidates
 
-# ── Anthropic API ────────────────────────────────────────
-ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
-CLAUDE_MODEL      = "claude-sonnet-4-6"
+# ── OpenRouter API ───────────────────────────────────────
+OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_MODEL   = os.getenv("OPENROUTER_MODEL", "anthropic/claude-sonnet-4.6")
+
+# ── Local Ollama ─────────────────────────────────────────
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "llama3.1")
 
 # ── Dimension weights ────────────────────────────────────
 # Role domain relevance is the primary differentiator
@@ -212,34 +221,40 @@ Return ONLY the JSON object as specified.
 
 
 # ──────────────────────────────────────────────────────────
-# STEP 3: Call Claude AI for scoring
+# STEP 3a: Call OpenRouter for scoring
 # ──────────────────────────────────────────────────────────
-def call_claude(prompt: str) -> dict:
+def call_openrouter(prompt: str) -> dict:
     print(f"\n{'═'*60}")
-    print(f"  STEP 2 — Sending to Claude AI for scoring")
+    print(f"  STEP 2 — Sending to OpenRouter ({OPENROUTER_MODEL}) for scoring")
     print(f"{'═'*60}")
 
+    if not OPENROUTER_API_KEY:
+        print("  ⚠ OPENROUTER_API_KEY is not set in .env")
+        return {}
+
     payload = {
-        "model":      CLAUDE_MODEL,
+        "model": OPENROUTER_MODEL,
+        "messages": [
+            {"role": "system", "content": SCORING_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
         "max_tokens": 1000,
-        "system":     SCORING_SYSTEM_PROMPT,
-        "messages":   [{"role": "user", "content": prompt}],
     }
 
     try:
         r = requests.post(
-            ANTHROPIC_API_URL,
-            headers={"Content-Type": "application/json"},
+            OPENROUTER_API_URL,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            },
             json=payload,
-            timeout=30,
+            timeout=60,
         )
         r.raise_for_status()
         data = r.json()
 
-        raw = ""
-        for block in data.get("content", []):
-            if block.get("type") == "text":
-                raw += block["text"]
+        raw = data["choices"][0]["message"]["content"]
 
         # Strip markdown fences if present
         raw = re.sub(r"```json|```", "", raw).strip()
@@ -251,7 +266,54 @@ def call_claude(prompt: str) -> dict:
         print(f"  Raw response: {raw[:300]}")
         return {}
     except Exception as e:
-        print(f"  ⚠ Claude API error: {e}")
+        print(f"  ⚠ OpenRouter API error: {e}")
+        return {}
+
+
+# ──────────────────────────────────────────────────────────
+# STEP 3b: Call local Ollama for scoring
+# ──────────────────────────────────────────────────────────
+def call_ollama(prompt: str) -> dict:
+    print(f"\n{'═'*60}")
+    print(f"  STEP 2 — Sending to local Ollama ({OLLAMA_MODEL}) for scoring")
+    print(f"{'═'*60}")
+
+    payload = {
+        "model": OLLAMA_MODEL,
+        "messages": [
+            {"role": "system", "content": SCORING_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        "stream": False,
+    }
+
+    try:
+        r = requests.post(
+            f"{OLLAMA_BASE_URL}/api/chat",
+            json=payload,
+            timeout=120,
+        )
+        r.raise_for_status()
+        data = r.json()
+
+        raw = data.get("message", {}).get("content", "")
+
+        # Strip markdown fences if present
+        raw = re.sub(r"```json|```", "", raw).strip()
+        scores = json.loads(raw)
+        return scores
+
+    except json.JSONDecodeError as e:
+        print(f"  ⚠ JSON parse error: {e}")
+        print(f"  Raw response: {raw[:300]}")
+        return {}
+    except requests.exceptions.ConnectionError:
+        print(f"  ⚠ Could not connect to Ollama at {OLLAMA_BASE_URL}")
+        print(f"    Make sure Ollama is running locally (`ollama serve`) and the model is pulled")
+        print(f"    (`ollama pull {OLLAMA_MODEL}`).")
+        return {}
+    except Exception as e:
+        print(f"  ⚠ Ollama API error: {e}")
         return {}
 
 
@@ -319,15 +381,26 @@ def print_and_save(candidate_name: str, scores: dict,
 # ──────────────────────────────────────────────────────────
 # MAIN PIPELINE
 # ──────────────────────────────────────────────────────────
-def evaluate_candidate(candidate_name: str, requirements: list[str]) -> dict:
+def evaluate_candidate(candidate_name: str, requirements: list[str],
+                       backend: str = "openrouter") -> dict:
+    """
+    backend: "openrouter" or "ollama"
+    """
     # 1. Collect
     sources, kws = collect_candidate_data(candidate_name, requirements)
 
     # 2. Build prompt
     prompt = build_prompt(candidate_name, requirements, sources, kws)
 
-    # 3. Score via Claude
-    scores = call_claude(prompt)
+    # 3. Score via chosen backend
+    if backend == "ollama":
+        scores = call_ollama(prompt)
+    elif backend == "openrouter":
+        scores = call_openrouter(prompt)
+    else:
+        print(f"  ❌ Unknown backend '{backend}'. Use 'openrouter' or 'ollama'.")
+        return {}
+
     if not scores:
         print("  ❌ Scoring failed — no data saved.")
         return {}
@@ -344,6 +417,7 @@ def evaluate_candidate(candidate_name: str, requirements: list[str]) -> dict:
         "rescoring_score": rescoring_score,
         "sources":         sources,
         "db_id":           row_id,
+        "backend":         backend,
     }
 
 
@@ -354,6 +428,10 @@ if __name__ == "__main__":
     print("=" * 60)
     print("   HIRE SYSTEM — AI CANDIDATE EVALUATOR")
     print("=" * 60)
+
+    backend = input("\nBackend to use [openrouter/ollama] (default: openrouter): ").strip().lower()
+    if backend not in ("openrouter", "ollama"):
+        backend = "openrouter"
 
     name = input("\nCandidate full name: ").strip()
     if not name:
@@ -369,7 +447,7 @@ if __name__ == "__main__":
         else:
             requirements.append(line)
 
-    result = evaluate_candidate(name, requirements)
+    result = evaluate_candidate(name, requirements, backend=backend)
 
     # Show leaderboard
     print(f"\n{'═'*60}")

@@ -61,6 +61,7 @@ app.add_middleware(
 class EvaluateRequest(BaseModel):
     candidate_name:   str
     job_requirements: list[str]
+    backend:          str = "openrouter"   # "openrouter" or "ollama"
 
     class Config:
         json_schema_extra = {
@@ -71,7 +72,8 @@ class EvaluateRequest(BaseModel):
                     "Python",
                     "Deep Learning",
                     "Published research",
-                ]
+                ],
+                "backend": "openrouter"
             }
         }
 
@@ -129,7 +131,7 @@ async def evaluate(req: EvaluateRequest):
     """
     Full pipeline:
     1. Search candidate's public profiles (GitHub, LinkedIn, Scholar, etc.)
-    2. Send collected data to Claude AI for 9-dimension scoring
+    2. Send collected data to the chosen LLM backend (OpenRouter or local Ollama) for 9-dimension scoring
     3. Compute weighted rescoring score
     4. Save to DB
     5. Return score + dimensions + source URLs
@@ -138,10 +140,16 @@ async def evaluate(req: EvaluateRequest):
         raise HTTPException(status_code=400, detail="candidate_name cannot be empty.")
     if not req.job_requirements:
         raise HTTPException(status_code=400, detail="job_requirements cannot be empty.")
+    if req.backend not in ("openrouter", "ollama"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"backend must be 'openrouter' or 'ollama', got '{req.backend}'."
+        )
 
     result = evaluate_candidate(
         candidate_name=req.candidate_name.strip(),
         requirements=req.job_requirements,
+        backend=req.backend,
     )
 
     if not result:
