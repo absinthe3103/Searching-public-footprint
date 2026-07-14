@@ -1,12 +1,37 @@
 """
 db.py - Candidate database
-Stores candidate name and rescoring score using SQLite.
+Stores candidate name, per-source usernames, and the 9 dimension
+scores using SQLite (no more single "rescoring_score" column).
 """
 
 import sqlite3
 import os
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "candidates.db")
+
+# The 9 scoring dimensions (see Backend/AI/api_AI.py for definitions)
+DIMENSION_COLUMNS = [
+    "technical_competency",
+    "problem_solving",
+    "communication",
+    "career_stability",
+    "company_exposure",
+    "academic_signal",
+    "initiative",
+    "risk_indicators",
+    "role_domain_relevance",
+]
+
+# Sources where the candidate supplies an exact username
+# (Google Scholar / ResearchGate are searched by full name, so no column)
+USERNAME_COLUMNS = [
+    "github_username",
+    "linkedin_username",
+    "kaggle_username",
+    "devto_username",
+    "medium_username",
+    "hashnode_username",
+]
 
 
 def get_connection():
@@ -17,34 +42,57 @@ def get_connection():
 
 def init_db():
     """Create the candidates table if it doesn't exist."""
+    dim_cols_sql = ",\n                ".join(
+        f"{col} REAL NOT NULL DEFAULT 0.0" for col in DIMENSION_COLUMNS
+    )
+    username_cols_sql = ",\n                ".join(
+        f"{col} TEXT" for col in USERNAME_COLUMNS
+    )
     with get_connection() as conn:
-        conn.execute("""
+        conn.execute(f"""
             CREATE TABLE IF NOT EXISTS candidates (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
                 name           TEXT    NOT NULL,
-                rescoring_score REAL   NOT NULL DEFAULT 0.0,
+                {username_cols_sql},
+                {dim_cols_sql},
                 created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         conn.commit()
 
 
-def insert_candidate(name: str, rescoring_score: float) -> int:
-    """Insert a candidate and return the new row id."""
+def insert_candidate(name: str, dimensions: dict, usernames: dict | None = None) -> int:
+    """
+    Insert a candidate and return the new row id.
+
+    dimensions: dict with the 9 dimension keys (see DIMENSION_COLUMNS), 0-100 each.
+    usernames:  optional dict with any of the USERNAME_COLUMNS keys.
+    """
+    usernames = usernames or {}
+
+    columns = ["name"] + USERNAME_COLUMNS + DIMENSION_COLUMNS
+    values = (
+        [name]
+        + [usernames.get(col) for col in USERNAME_COLUMNS]
+        + [dimensions.get(col, 0) for col in DIMENSION_COLUMNS]
+    )
+    placeholders = ", ".join(["?"] * len(columns))
+    col_list = ", ".join(columns)
+
     with get_connection() as conn:
         cursor = conn.execute(
-            "INSERT INTO candidates (name, rescoring_score) VALUES (?, ?)",
-            (name, rescoring_score)
+            f"INSERT INTO candidates ({col_list}) VALUES ({placeholders})",
+            values,
         )
         conn.commit()
         return cursor.lastrowid
 
 
 def get_all_candidates() -> list:
-    """Return all candidates ordered by score descending."""
+    """Return all candidates, best role_domain_relevance first."""
     with get_connection() as conn:
         rows = conn.execute(
-            "SELECT * FROM candidates ORDER BY rescoring_score DESC"
+            "SELECT * FROM candidates ORDER BY role_domain_relevance DESC"
         ).fetchall()
         return [dict(row) for row in rows]
 
@@ -58,12 +106,35 @@ def get_candidate_by_id(candidate_id: int) -> dict | None:
         return dict(row) if row else None
 
 
-def update_score(candidate_id: int, new_score: float) -> bool:
-    """Update the rescoring score for a candidate."""
+def update_dimension_scores(candidate_id: int, dimensions: dict) -> bool:
+    """Update one or more of the 9 dimension scores for a candidate."""
+    updates = {k: v for k, v in dimensions.items() if k in DIMENSION_COLUMNS}
+    if not updates:
+        return False
+
+    set_clause = ", ".join(f"{col} = ?" for col in updates)
+    values = list(updates.values()) + [candidate_id]
+
     with get_connection() as conn:
         cursor = conn.execute(
-            "UPDATE candidates SET rescoring_score = ? WHERE id = ?",
-            (new_score, candidate_id)
+            f"UPDATE candidates SET {set_clause} WHERE id = ?", values
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def update_usernames(candidate_id: int, usernames: dict) -> bool:
+    """Update one or more of the source usernames for a candidate."""
+    updates = {k: v for k, v in usernames.items() if k in USERNAME_COLUMNS}
+    if not updates:
+        return False
+
+    set_clause = ", ".join(f"{col} = ?" for col in updates)
+    values = list(updates.values()) + [candidate_id]
+
+    with get_connection() as conn:
+        cursor = conn.execute(
+            f"UPDATE candidates SET {set_clause} WHERE id = ?", values
         )
         conn.commit()
         return cursor.rowcount > 0

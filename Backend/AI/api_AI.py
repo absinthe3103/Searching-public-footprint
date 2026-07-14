@@ -44,6 +44,13 @@ OPENROUTER_MODEL   = os.getenv("OPENROUTER_MODEL", "anthropic/claude-sonnet-4.6"
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "llama3.1")
 
+# ── Dimension keys (must match Backend/database/db.py DIMENSION_COLUMNS) ──
+DIMENSION_KEYS = [
+    "technical_competency", "problem_solving", "communication",
+    "career_stability", "company_exposure", "academic_signal",
+    "initiative", "risk_indicators", "role_domain_relevance",
+]
+
 # ── Dimension weights ────────────────────────────────────
 # Role domain relevance is the primary differentiator
 WEIGHTS = {
@@ -340,7 +347,8 @@ def compute_rescoring_score(scores: dict) -> float:
 # STEP 5: Print report + save to DB
 # ──────────────────────────────────────────────────────────
 def print_and_save(candidate_name: str, scores: dict,
-                   rescoring_score: float, requirements: list[str]):
+                   rescoring_score: float, requirements: list[str],
+                   usernames: dict | None = None):
 
     print(f"\n{'═'*60}")
     print(f"  STEP 3 — Results for: {candidate_name}")
@@ -371,9 +379,13 @@ def print_and_save(candidate_name: str, scores: dict,
     print(f"  ⭐ RESCORING SCORE  :  {rescoring_score} / 100")
     print(f"{'─'*60}")
 
-    # Save to DB
-    row_id = insert_candidate(candidate_name, rescoring_score)
-    print(f"\n  ✅ Saved to DB  →  id={row_id}, name='{candidate_name}', score={rescoring_score}")
+    # Save to DB — store the raw 9 dimension scores + source usernames.
+    # (rescoring_score is still returned to the caller, but it's a computed
+    # value now, not persisted as its own column — see Backend/database/db.py)
+    dimensions = {k: scores.get(k, 0) for k in DIMENSION_KEYS}
+    row_id = insert_candidate(candidate_name, dimensions, usernames)
+    print(f"\n  ✅ Saved to DB  →  id={row_id}, name='{candidate_name}', "
+          f"rescoring_score={rescoring_score} (computed, not stored)")
 
     return row_id
 
@@ -382,9 +394,15 @@ def print_and_save(candidate_name: str, scores: dict,
 # MAIN PIPELINE
 # ──────────────────────────────────────────────────────────
 def evaluate_candidate(candidate_name: str, requirements: list[str],
-                       backend: str = "openrouter") -> dict:
+                       backend: str = "openrouter",
+                       usernames: dict | None = None) -> dict:
     """
     backend: "openrouter" or "ollama"
+    usernames: optional dict of source usernames, e.g.
+        {"github_username": "torvalds", "linkedin_username": "linus-torvalds"}
+        Saved to the DB alongside the candidate. (Not yet used to drive the
+        searches themselves — those still search by name; see
+        candidateSearcher.py if you want to wire usernames into the lookups.)
     """
     # 1. Collect
     sources, kws = collect_candidate_data(candidate_name, requirements)
@@ -409,7 +427,8 @@ def evaluate_candidate(candidate_name: str, requirements: list[str],
     rescoring_score = compute_rescoring_score(scores)
 
     # 5. Print + save
-    row_id = print_and_save(candidate_name, scores, rescoring_score, requirements)
+    row_id = print_and_save(candidate_name, scores, rescoring_score,
+                            requirements, usernames)
 
     return {
         "candidate":       candidate_name,
@@ -456,4 +475,4 @@ if __name__ == "__main__":
     all_c = get_all_candidates()
     for i, c in enumerate(all_c, 1):
         marker = " ◄ current" if c["name"] == name else ""
-        print(f"  {i}. {c['name']:<30} {c['rescoring_score']:>6}/100{marker}")
+        print(f"  {i}. {c['name']:<30} role_domain_relevance={c['role_domain_relevance']:>3}/100{marker}")

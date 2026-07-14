@@ -61,6 +61,20 @@ const SOURCES = [
   { key: 'hashnode',       label: 'Hashnode',     icon: 'ti-hash'              },
 ] as const
 
+// Sources where the candidate can supply an exact username to improve
+// search accuracy (Google Scholar / ResearchGate are still name-based,
+// so they're excluded here — see Backend/database/db.py USERNAME_COLUMNS)
+const USERNAME_FIELDS = [
+  { key: 'github_username',   label: 'GitHub',   icon: 'ti-brand-github',   placeholder: 'e.g. octocat' },
+  { key: 'linkedin_username', label: 'LinkedIn', icon: 'ti-brand-linkedin', placeholder: 'e.g. andrew-ng' },
+  { key: 'kaggle_username',   label: 'Kaggle',   icon: 'ti-chart-line',     placeholder: 'e.g. andrewng' },
+  { key: 'devto_username',    label: 'Dev.to',   icon: 'ti-brand-deviantart', placeholder: 'e.g. andrewng' },
+  { key: 'medium_username',   label: 'Medium',   icon: 'ti-pencil',         placeholder: 'e.g. andrewng' },
+  { key: 'hashnode_username', label: 'Hashnode', icon: 'ti-hash',           placeholder: 'e.g. andrewng' },
+] as const
+
+type UsernameKey = typeof USERNAME_FIELDS[number]['key']
+
 const LOADING_STEPS = [
   'Searching public profiles...',
   'Analysing GitHub activity...',
@@ -180,6 +194,11 @@ export default function Page() {
   const [loadingStep,   setLoadingStep]     = useState(0)
   const [result,        setResult]          = useState<EvaluateResponse | null>(null)
   const [error,         setError]           = useState<string | null>(null)
+  const [usernames,     setUsernames]       = useState<Record<UsernameKey, string>>({
+    github_username: '', linkedin_username: '', kaggle_username: '',
+    devto_username: '', medium_username: '', hashnode_username: '',
+  })
+  const [showUsernames, setShowUsernames]   = useState(false)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -210,12 +229,20 @@ export default function Page() {
     }, 2200)
 
     try {
+      // Only send usernames the user actually filled in
+      const usernamePayload = Object.fromEntries(
+        Object.entries(usernames)
+          .filter(([, v]) => v.trim())
+          .map(([k, v]) => [k, v.trim()])
+      )
+
       const res = await fetch(`${API_URL}/evaluate`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           candidate_name:   candidateName.trim(),
           job_requirements: requirements,
+          ...usernamePayload,
         }),
       })
 
@@ -237,7 +264,7 @@ export default function Page() {
       clearInterval(interval)
       setLoading(false)
     }
-  }, [candidateName, requirements])
+  }, [candidateName, requirements, usernames])
 
   /* ── Render ── */
   return (
@@ -280,6 +307,50 @@ export default function Page() {
                 value={candidateName}
                 onChange={e => setCandidateName(e.target.value)}
               />
+            </div>
+
+            {/* Optional source usernames — improves search accuracy over
+                guessing a username from the candidate's name */}
+            <div style={{ marginBottom: 20 }}>
+              <button
+                onClick={() => setShowUsernames(v => !v)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  padding: 0, fontSize: 11, color: 'var(--slate)',
+                  width: '100%', justifyContent: 'space-between',
+                }}
+                aria-expanded={showUsernames}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <i className="ti ti-at" aria-hidden style={{ fontSize: 12 }} />
+                  Source usernames (optional)
+                </span>
+                <i className={`ti ${showUsernames ? 'ti-chevron-up' : 'ti-chevron-down'}`} aria-hidden style={{ fontSize: 13 }} />
+              </button>
+
+              {showUsernames && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+                  <p style={{ fontSize: 10.5, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 2 }}>
+                    Exact handles help matching beat guesses from the name.
+                    Google Scholar is still searched by full name.
+                  </p>
+                  {USERNAME_FIELDS.map(f => (
+                    <div key={f.key}>
+                      <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <i className={`ti ${f.icon}`} aria-hidden style={{ fontSize: 11 }} />
+                        {f.label}
+                      </label>
+                      <input
+                        className="field-input"
+                        placeholder={f.placeholder}
+                        value={usernames[f.key]}
+                        onChange={e => setUsernames(prev => ({ ...prev, [f.key]: e.target.value }))}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="section-label">Job requirements</div>
