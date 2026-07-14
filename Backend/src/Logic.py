@@ -63,6 +63,16 @@ class EvaluateRequest(BaseModel):
     job_requirements: list[str]
     backend:          str = "openrouter"   # "openrouter" or "ollama"
 
+    # Optional exact usernames — improves search accuracy over guessing
+    # a username from the candidate's name. Google Scholar / ResearchGate
+    # are still looked up by full name, so no fields for those.
+    github_username:   str | None = None
+    linkedin_username: str | None = None
+    kaggle_username:   str | None = None
+    devto_username:    str | None = None
+    medium_username:   str | None = None
+    hashnode_username: str | None = None
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -73,7 +83,13 @@ class EvaluateRequest(BaseModel):
                     "Deep Learning",
                     "Published research",
                 ],
-                "backend": "openrouter"
+                "backend": "openrouter",
+                "github_username": "andrewyng",
+                "linkedin_username": "andrewyng",
+                "kaggle_username": None,
+                "devto_username": None,
+                "medium_username": None,
+                "hashnode_username": None
             }
         }
 
@@ -111,10 +127,29 @@ class EvaluateResponse(BaseModel):
 
 
 class CandidateRow(BaseModel):
-    id:              int
-    name:            str
-    rescoring_score: float
-    created_at:      str
+    id:   int
+    name: str
+
+    # Source usernames
+    github_username:   str | None = None
+    linkedin_username: str | None = None
+    kaggle_username:   str | None = None
+    devto_username:    str | None = None
+    medium_username:   str | None = None
+    hashnode_username: str | None = None
+
+    # 9 dimension scores (replaces the old single rescoring_score column)
+    technical_competency:  float
+    problem_solving:       float
+    communication:         float
+    career_stability:      float
+    company_exposure:      float
+    academic_signal:       float
+    initiative:            float
+    risk_indicators:       float
+    role_domain_relevance: float
+
+    created_at: str
 
 
 # ──────────────────────────────────────────────────────────
@@ -146,10 +181,20 @@ async def evaluate(req: EvaluateRequest):
             detail=f"backend must be 'openrouter' or 'ollama', got '{req.backend}'."
         )
 
+    usernames = {
+        "github_username":   req.github_username,
+        "linkedin_username": req.linkedin_username,
+        "kaggle_username":   req.kaggle_username,
+        "devto_username":    req.devto_username,
+        "medium_username":   req.medium_username,
+        "hashnode_username": req.hashnode_username,
+    }
+
     result = evaluate_candidate(
         candidate_name=req.candidate_name.strip(),
         requirements=req.job_requirements,
         backend=req.backend,
+        usernames=usernames,
     )
 
     if not result:
