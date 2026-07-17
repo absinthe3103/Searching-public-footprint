@@ -29,6 +29,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import sys
 import os
+from typing import Any
 
 _BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(_BACKEND, "AI"))
@@ -63,15 +64,17 @@ class EvaluateRequest(BaseModel):
     job_requirements: list[str]
     backend:          str = "openrouter"   # "openrouter" or "ollama"
 
-    # Optional exact usernames — improves search accuracy over guessing
-    # a username from the candidate's name. Google Scholar / ResearchGate
-    # are still looked up by full name, so no fields for those.
-    github_username:   str | None = None
-    linkedin_username: str | None = None
-    kaggle_username:   str | None = None
-    devto_username:    str | None = None
-    medium_username:   str | None = None
-    hashnode_username: str | None = None
+    # Optional exact usernames/URLs for each platform
+    github_username:            str | None = None
+    linkedin_username:          str | None = None
+    kaggle_username:            str | None = None
+    devto_username:             str | None = None
+    medium_username:            str | None = None
+    hashnode_username:          str | None = None
+    # Scholar: Google Scholar user ID, Semantic Scholar author ID/URL, or full URL
+    google_scholar_identifier:  str | None = None
+    # ResearchGate: profile slug, ORCID iD (xxxx-xxxx-xxxx-xxxx), or full URL
+    researchgate_identifier:    str | None = None
 
     class Config:
         json_schema_extra = {
@@ -123,7 +126,9 @@ class EvaluateResponse(BaseModel):
     dimensions:      DimensionScores
     reasoning:       dict
     source_urls:     SourceURLs
+    source_details:  dict[str, Any]
     db_id:           int
+    scoring_failed:  bool = False   # True when AI scoring was skipped
 
 
 class CandidateRow(BaseModel):
@@ -182,12 +187,14 @@ async def evaluate(req: EvaluateRequest):
         )
 
     usernames = {
-        "github_username":   req.github_username,
-        "linkedin_username": req.linkedin_username,
-        "kaggle_username":   req.kaggle_username,
-        "devto_username":    req.devto_username,
-        "medium_username":   req.medium_username,
-        "hashnode_username": req.hashnode_username,
+        "github_username":           req.github_username,
+        "linkedin_username":         req.linkedin_username,
+        "kaggle_username":           req.kaggle_username,
+        "devto_username":            req.devto_username,
+        "medium_username":           req.medium_username,
+        "hashnode_username":         req.hashnode_username,
+        "google_scholar_identifier": req.google_scholar_identifier,
+        "researchgate_identifier":   req.researchgate_identifier,
     }
 
     result = evaluate_candidate(
@@ -197,10 +204,11 @@ async def evaluate(req: EvaluateRequest):
         usernames=usernames,
     )
 
-    if not result:
+    # result is None only if backend name was invalid or a fatal error occurred
+    if not result or "sources" not in result:
         raise HTTPException(
             status_code=502,
-            detail="AI scoring failed. Check API connectivity or candidate name."
+            detail="Pipeline failed: could not collect any public profile data."
         )
 
     scores  = result.get("scores", {})
@@ -227,13 +235,36 @@ async def evaluate(req: EvaluateRequest):
         "hashnode":       sources.get("hashnode",       {}).get("profile_url"),
     }
 
+    source_details = {
+        key: {
+            "profile_url": value.get("profile_url"),
+            "summary": value.get("summary"),
+            "latest_push": value.get("latest_push"),
+            "contribution_activity": value.get("contribution_activity"),
+            "current_role": value.get("current_role"),
+            "company": value.get("company"),
+            "citations": value.get("citations"),
+            "interests": value.get("interests"),
+            "publications": value.get("publications"),
+            "articles": value.get("articles"),
+            "top_languages": value.get("top_languages"),
+            "keyword_hits": value.get("keyword_hits"),
+            "repos": value.get("repos", []),
+            "writeups": value.get("writeups", []),
+            "pinned_works": value.get("pinned_works", []),
+        }
+        for key, value in sources.items()
+    }
+
     return EvaluateResponse(
         candidate_name=req.candidate_name,
         rescoring_score=result["rescoring_score"],
         dimensions=DimensionScores(**dimensions),
         reasoning=reasoning,
         source_urls=SourceURLs(**source_urls),
+        source_details=source_details,
         db_id=result.get("db_id", -1),
+        scoring_failed=result.get("scoring_failed", False),
     )
 
 
@@ -257,4 +288,4 @@ def get_candidate(candidate_id: int):
 # ──────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("Logic:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("logic:app", host="0.0.0.0", port=8000, reload=True)

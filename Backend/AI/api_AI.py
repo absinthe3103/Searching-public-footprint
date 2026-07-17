@@ -24,6 +24,14 @@ import requests
 import time
 import re
 
+# Ensure Windows terminal encoding errors never crash print statements
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -113,14 +121,20 @@ Response format (strict JSON, no extras):
 # ──────────────────────────────────────────────────────────
 # STEP 1: Collect candidate data via searcher
 # ──────────────────────────────────────────────────────────
-def collect_candidate_data(candidate_name: str, requirements: list[str]) -> dict:
+def collect_candidate_data(candidate_name: str, requirements: list[str],
+                           usernames: dict | None = None) -> tuple[dict, list]:
     """
     Import and run the candidate searcher inline.
     Returns the full sources dict.
+
+    usernames: optional dict of explicit handles, e.g.
+        {"github_username": "octocat", "kaggle_username": "andrewng"}
+    When a platform username is provided it is tried directly first,
+    bypassing the full-name search for that platform.
     """
-    print(f"\n{'═'*60}")
+    print(f"\n{'='*60}")
     print(f"  STEP 1 — Collecting public profile data")
-    print(f"{'═'*60}")
+    print(f"{'='*60}")
 
     # Import searcher functions
     from candidateSearcher import (
@@ -138,15 +152,20 @@ def collect_candidate_data(candidate_name: str, requirements: list[str]) -> dict
     kws = list(dict.fromkeys(kws))
     print(f"  Keywords: {kws}\n")
 
+    u = usernames or {}
+
+    # Pass each platform's username as the 'identifier' argument.
+    # The individual search_* functions already implement the logic:
+    #   if identifier given → try it directly first, skip name-based guess.
     sources = {}
-    sources["github"]         = search_github(candidate_name, kws);         time.sleep(1.2)
-    sources["linkedin"]       = search_linkedin(candidate_name, kws);       time.sleep(1.2)
-    sources["google_scholar"] = search_google_scholar(candidate_name, kws); time.sleep(1.2)
-    sources["researchgate"]   = search_researchgate(candidate_name, kws);   time.sleep(1.2)
-    sources["kaggle"]         = search_kaggle(candidate_name, kws);         time.sleep(1.2)
-    sources["devto"]          = search_devto(candidate_name, kws);          time.sleep(1.2)
-    sources["medium"]         = search_medium(candidate_name, kws);         time.sleep(1.2)
-    sources["hashnode"]       = search_hashnode(candidate_name, kws)
+    sources["github"]         = search_github(candidate_name, kws, u.get("github_username"));     time.sleep(1.2)
+    sources["linkedin"]       = search_linkedin(candidate_name, kws, u.get("linkedin_username")); time.sleep(1.2)
+    sources["google_scholar"] = search_google_scholar(candidate_name, kws, u.get("google_scholar_identifier")); time.sleep(1.2)
+    sources["researchgate"]   = search_researchgate(candidate_name, kws, u.get("researchgate_identifier"));   time.sleep(1.2)
+    sources["kaggle"]         = search_kaggle(candidate_name, kws, u.get("kaggle_username"));     time.sleep(1.2)
+    sources["devto"]          = search_devto(candidate_name, kws, u.get("devto_username"));       time.sleep(1.2)
+    sources["medium"]         = search_medium(candidate_name, kws, u.get("medium_username"));     time.sleep(1.2)
+    sources["hashnode"]       = search_hashnode(candidate_name, kws, u.get("hashnode_username"))
 
     return sources, kws
 
@@ -248,6 +267,7 @@ def call_openrouter(prompt: str) -> dict:
         "max_tokens": 1000,
     }
 
+    raw = ""  # pre-declare so the except handler never sees an unbound name
     try:
         r = requests.post(
             OPENROUTER_API_URL,
@@ -294,6 +314,7 @@ def call_ollama(prompt: str) -> dict:
         "stream": False,
     }
 
+    raw = ""  # pre-declare so the except handler never sees an unbound name
     try:
         r = requests.post(
             f"{OLLAMA_BASE_URL}/api/chat",
@@ -400,12 +421,12 @@ def evaluate_candidate(candidate_name: str, requirements: list[str],
     backend: "openrouter" or "ollama"
     usernames: optional dict of source usernames, e.g.
         {"github_username": "torvalds", "linkedin_username": "linus-torvalds"}
-        Saved to the DB alongside the candidate. (Not yet used to drive the
-        searches themselves — those still search by name; see
-        candidateSearcher.py if you want to wire usernames into the lookups.)
+        Saved to the DB alongside the candidate and now also forwarded to
+        the individual platform searchers so that an exact handle is used
+        instead of guessing from the candidate's full name.
     """
-    # 1. Collect
-    sources, kws = collect_candidate_data(candidate_name, requirements)
+    # 1. Collect (pass usernames so search_* functions can use them directly)
+    sources, kws = collect_candidate_data(candidate_name, requirements, usernames)
 
     # 2. Build prompt
     prompt = build_prompt(candidate_name, requirements, sources, kws)
@@ -420,8 +441,20 @@ def evaluate_candidate(candidate_name: str, requirements: list[str],
         return {}
 
     if not scores:
-        print("  ❌ Scoring failed — no data saved.")
-        return {}
+        # AI scoring failed — still return the collected source data
+        # so the frontend can show the analytics dashboard.
+        print("  ⚠ Scoring failed — returning collected data without AI scores.")
+        zero_scores = {k: 0 for k in DIMENSION_KEYS}
+        zero_scores["reasoning"] = {}
+        return {
+            "candidate":      candidate_name,
+            "scores":         zero_scores,
+            "rescoring_score": 0.0,
+            "sources":        sources,
+            "db_id":          -1,          # not saved to DB
+            "backend":        backend,
+            "scoring_failed": True,
+        }
 
     # 4. Weighted total
     rescoring_score = compute_rescoring_score(scores)
