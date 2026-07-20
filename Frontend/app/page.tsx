@@ -4,73 +4,74 @@ import { useRef, useState, useCallback } from 'react'
 
 /* ── Types ─────────────────────────────────────────────── */
 interface DimensionScores {
-  technical_competency:  number
-  problem_solving:       number
-  communication:         number
-  career_stability:      number
-  company_exposure:      number
-  academic_signal:       number
-  initiative:            number
-  risk_indicators:       number
+  technical_competency: number
+  problem_solving: number
+  communication: number
+  career_stability: number
+  company_exposure: number
+  academic_signal: number
+  initiative: number
+  risk_indicators: number
   role_domain_relevance: number
 }
 
 interface SourceURLs {
-  github:         string | null
-  linkedin:       string | null
+  github: string | null
+  linkedin: string | null
   google_scholar: string | null
-  researchgate:   string | null
-  kaggle:         string | null
-  devto:          string | null
-  medium:         string | null
-  hashnode:       string | null
+  researchgate: string | null
+  kaggle: string | null
+  devto: string | null
+  medium: string | null
+  hashnode: string | null
 }
 
 interface EvaluateResponse {
-  candidate_name:  string
+  candidate_name: string
   rescoring_score: number
-  dimensions:      DimensionScores
-  reasoning:       Record<string, string>
-  source_urls:     SourceURLs
-  db_id:           number
+  dimensions: DimensionScores
+  reasoning: Record<string, string>
+  source_urls: SourceURLs
+  source_details?: Record<string, any>
+  db_id: number
+  scoring_failed?: boolean
 }
 
 /* ── Constants ──────────────────────────────────────────── */
 const API_URL = 'http://localhost:8000'
 
 const DIMS = [
-  { key: 'technical_competency',  label: 'Technical competency', icon: 'ti-code',           subtracted: false, primary: false },
-  { key: 'problem_solving',       label: 'Problem solving',      icon: 'ti-puzzle',          subtracted: false, primary: false },
-  { key: 'communication',         label: 'Communication',        icon: 'ti-message',         subtracted: false, primary: false },
-  { key: 'career_stability',      label: 'Career stability',     icon: 'ti-calendar-check',  subtracted: false, primary: false },
-  { key: 'company_exposure',      label: 'Company exposure',     icon: 'ti-building',        subtracted: false, primary: false },
-  { key: 'academic_signal',       label: 'Academic signal',      icon: 'ti-school',          subtracted: false, primary: false },
-  { key: 'initiative',            label: 'Initiative',           icon: 'ti-rocket',          subtracted: false, primary: false },
-  { key: 'risk_indicators',       label: 'Risk indicators',      icon: 'ti-alert-triangle',  subtracted: true,  primary: false },
-  { key: 'role_domain_relevance', label: 'Role domain relevance',icon: 'ti-target',          subtracted: false, primary: true  },
+  { key: 'technical_competency', label: 'Technical competency', icon: 'ti-code', subtracted: false, primary: false },
+  { key: 'problem_solving', label: 'Problem solving', icon: 'ti-puzzle', subtracted: false, primary: false },
+  { key: 'communication', label: 'Communication', icon: 'ti-message', subtracted: false, primary: false },
+  { key: 'career_stability', label: 'Career stability', icon: 'ti-calendar-check', subtracted: false, primary: false },
+  { key: 'company_exposure', label: 'Company exposure', icon: 'ti-building', subtracted: false, primary: false },
+  { key: 'academic_signal', label: 'Academic signal', icon: 'ti-school', subtracted: false, primary: false },
+  { key: 'initiative', label: 'Initiative', icon: 'ti-rocket', subtracted: false, primary: false },
+  { key: 'risk_indicators', label: 'Risk indicators', icon: 'ti-alert-triangle', subtracted: true, primary: false },
+  { key: 'role_domain_relevance', label: 'Role domain relevance', icon: 'ti-target', subtracted: false, primary: true },
 ] as const
 
 const SOURCES = [
-  { key: 'github',         label: 'GitHub',       icon: 'ti-brand-github'      },
-  { key: 'linkedin',       label: 'LinkedIn',     icon: 'ti-brand-linkedin'    },
-  { key: 'google_scholar', label: 'Scholar',      icon: 'ti-school'            },
-  { key: 'researchgate',   label: 'ResearchGate', icon: 'ti-file-text'         },
-  { key: 'kaggle',         label: 'Kaggle',       icon: 'ti-chart-line'        },
-  { key: 'devto',          label: 'Dev.to',       icon: 'ti-brand-deviantart'  },
-  { key: 'medium',         label: 'Medium',       icon: 'ti-pencil'            },
-  { key: 'hashnode',       label: 'Hashnode',     icon: 'ti-hash'              },
+  { key: 'github', label: 'GitHub', icon: 'ti-brand-github' },
+  { key: 'linkedin', label: 'LinkedIn', icon: 'ti-brand-linkedin' },
+  { key: 'google_scholar', label: 'Scholar', icon: 'ti-school' },
+  { key: 'researchgate', label: 'ResearchGate', icon: 'ti-file-text' },
+  { key: 'kaggle', label: 'Kaggle', icon: 'ti-chart-line' },
+  { key: 'devto', label: 'Dev.to', icon: 'ti-brand-deviantart' },
+  { key: 'medium', label: 'Medium', icon: 'ti-pencil' },
+  { key: 'hashnode', label: 'Hashnode', icon: 'ti-hash' },
 ] as const
 
-// Sources where the candidate can supply an exact username to improve
-// search accuracy (Google Scholar / ResearchGate are still name-based,
-// so they're excluded here — see Backend/database/db.py USERNAME_COLUMNS)
 const USERNAME_FIELDS = [
-  { key: 'github_username',   label: 'GitHub',   icon: 'ti-brand-github',   placeholder: 'e.g. octocat' },
-  { key: 'linkedin_username', label: 'LinkedIn', icon: 'ti-brand-linkedin', placeholder: 'e.g. andrew-ng' },
-  { key: 'kaggle_username',   label: 'Kaggle',   icon: 'ti-chart-line',     placeholder: 'e.g. andrewng' },
-  { key: 'devto_username',    label: 'Dev.to',   icon: 'ti-brand-deviantart', placeholder: 'e.g. andrewng' },
-  { key: 'medium_username',   label: 'Medium',   icon: 'ti-pencil',         placeholder: 'e.g. andrewng' },
-  { key: 'hashnode_username', label: 'Hashnode', icon: 'ti-hash',           placeholder: 'e.g. andrewng' },
+  { key: 'github_username', label: 'GitHub', icon: 'ti-brand-github', placeholder: 'e.g. github.com/yourname', urlPattern: /github\.com\/([A-Za-z0-9_-]+)/ },
+  { key: 'linkedin_username', label: 'LinkedIn', icon: 'ti-brand-linkedin', placeholder: 'e.g. linkedin.com/in/yourname', urlPattern: /(?:[a-z0-9\-]+\.)?linkedin\.com\/in\/([A-Za-z0-9_\-%]+)/i },
+  { key: 'google_scholar_identifier', label: 'Google Scholar', icon: 'ti-school', placeholder: 'e.g. scholar.google.com/citations?user=yourname', urlPattern: /scholar\.google\.com\/citations\?user=([A-Za-z0-9_-]+)/ },
+  { key: 'researchgate_identifier', label: 'ResearchGate', icon: 'ti-file-text', placeholder: 'e.g. ORCID or researchgate.net/profile/yourname', urlPattern: /researchgate\.net\/profile\/([A-Za-z0-9_.-]+)/ },
+  { key: 'kaggle_username', label: 'Kaggle', icon: 'ti-chart-line', placeholder: 'e.g. kaggle.com/yourname', urlPattern: /kaggle\.com\/([A-Za-z0-9_-]+)/ },
+  { key: 'devto_username', label: 'Dev.to', icon: 'ti-brand-deviantart', placeholder: 'e.g. dev.to/yourname', urlPattern: /dev\.to\/([A-Za-z0-9_-]+)/ },
+  { key: 'medium_username', label: 'Medium', icon: 'ti-pencil', placeholder: 'e.g. medium.com/@yourname', urlPattern: /medium\.com\/@?([A-Za-z0-9_.-]+)/ },
+  { key: 'hashnode_username', label: 'Hashnode', icon: 'ti-hash', placeholder: 'e.g. hashnode.dev/yourname', urlPattern: /hashnode\.dev\/([A-Za-z0-9_-]+)/ },
 ] as const
 
 type UsernameKey = typeof USERNAME_FIELDS[number]['key']
@@ -81,6 +82,18 @@ const LOADING_STEPS = [
   'Checking publications...',
   'Scoring 9 dimensions...',
 ]
+
+/* ── Per-field URL extractor ────────────────────────────── */
+// If the user pastes a full URL into a platform field, strip it to just the username.
+function extractUsername(raw: string, urlPattern: RegExp): string {
+  const trimmed = raw.trim()
+  const match = trimmed.match(urlPattern)
+  if (match && match[1]) {
+    return match[1].split('/')[0]  // remove any trailing path segments
+  }
+  return trimmed  // already a plain username — return as-is
+}
+
 
 /* ── Helpers ────────────────────────────────────────────── */
 function getInitials(name: string) {
@@ -105,27 +118,27 @@ function drawRadar(canvas: HTMLCanvasElement, scores: DimensionScores) {
   const size = canvas.width
   const cx = size / 2
   const cy = size / 2
-  const r  = cx - 36
-  const n  = DIMS.length
+  const r = cx - 36
+  const n = DIMS.length
 
   const vals = DIMS.map(d => (scores[d.key as keyof DimensionScores] ?? 0) / 100)
 
   ctx.clearRect(0, 0, size, size)
 
-  /* rings */
-  ;[0.25, 0.5, 0.75, 1.0].forEach(ring => {
-    ctx.beginPath()
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * 2 * Math.PI - Math.PI / 2
-      const x = cx + r * ring * Math.cos(a)
-      const y = cy + r * ring * Math.sin(a)
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
-    }
-    ctx.closePath()
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)'
-    ctx.lineWidth = 0.5
-    ctx.stroke()
-  })
+    /* rings */
+    ;[0.25, 0.5, 0.75, 1.0].forEach(ring => {
+      ctx.beginPath()
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * 2 * Math.PI - Math.PI / 2
+        const x = cx + r * ring * Math.cos(a)
+        const y = cy + r * ring * Math.sin(a)
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+      }
+      ctx.closePath()
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)'
+      ctx.lineWidth = 0.5
+      ctx.stroke()
+    })
 
   /* spokes */
   for (let i = 0; i < n; i++) {
@@ -147,10 +160,10 @@ function drawRadar(canvas: HTMLCanvasElement, scores: DimensionScores) {
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
   })
   ctx.closePath()
-  ctx.fillStyle   = 'rgba(201,168,76,0.18)'
+  ctx.fillStyle = 'rgba(201,168,76,0.18)'
   ctx.fill()
   ctx.strokeStyle = '#C9A84C'
-  ctx.lineWidth   = 1.5
+  ctx.lineWidth = 1.5
   ctx.stroke()
 
   /* dots */
@@ -166,13 +179,13 @@ function drawRadar(canvas: HTMLCanvasElement, scores: DimensionScores) {
 
   /* labels */
   DIMS.forEach((d, i) => {
-    const a  = (i / n) * 2 * Math.PI - Math.PI / 2
+    const a = (i / n) * 2 * Math.PI - Math.PI / 2
     const lx = cx + (r + 22) * Math.cos(a)
     const ly = cy + (r + 22) * Math.sin(a)
-    ctx.textAlign    = 'center'
+    ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillStyle    = d.primary ? '#E8C96A' : 'rgba(176,190,200,0.85)'
-    ctx.font         = `${d.primary ? '500 ' : ''}10px Inter,sans-serif`
+    ctx.fillStyle = d.primary ? '#E8C96A' : 'rgba(176,190,200,0.85)'
+    ctx.font = `${d.primary ? '500 ' : ''}10px Inter,sans-serif`
     const words = d.label.split(' ')
     if (words.length > 2) {
       ctx.fillText(words.slice(0, 2).join(' '), lx, ly - 6)
@@ -187,18 +200,20 @@ function drawRadar(canvas: HTMLCanvasElement, scores: DimensionScores) {
    PAGE COMPONENT
 ══════════════════════════════════════════════════════════ */
 export default function Page() {
-  const [candidateName, setCandidateName]   = useState('')
-  const [requirements,  setRequirements]    = useState<string[]>([])
-  const [reqInput,      setReqInput]        = useState('')
-  const [loading,       setLoading]         = useState(false)
-  const [loadingStep,   setLoadingStep]     = useState(0)
-  const [result,        setResult]          = useState<EvaluateResponse | null>(null)
-  const [error,         setError]           = useState<string | null>(null)
-  const [usernames,     setUsernames]       = useState<Record<UsernameKey, string>>({
-    github_username: '', linkedin_username: '', kaggle_username: '',
-    devto_username: '', medium_username: '', hashnode_username: '',
+  const [candidateName, setCandidateName] = useState('')
+  const [requirements, setRequirements] = useState<string[]>([])
+  const [reqInput, setReqInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [loadingStep, setLoadingStep] = useState(0)
+  const [result, setResult] = useState<EvaluateResponse | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [usernames, setUsernames] = useState<Record<UsernameKey, string>>({
+    github_username: '', linkedin_username: '',
+    google_scholar_identifier: '', researchgate_identifier: '',
+    kaggle_username: '', devto_username: '', medium_username: '', hashnode_username: '',
   })
-  const [showUsernames, setShowUsernames]   = useState(false)
+  const [showUsernames, setShowUsernames] = useState(false)
+  const [fieldUrlHints, setFieldUrlHints] = useState<Record<string, boolean>>({})
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -213,6 +228,19 @@ export default function Page() {
   const removeReq = useCallback((i: number) => {
     setRequirements(prev => prev.filter((_, idx) => idx !== i))
   }, [])
+
+  /* Per-field username/URL handler — strips profile URLs to plain usernames */
+  const handleUsernameChange = useCallback((
+    key: UsernameKey,
+    raw: string,
+    urlPattern: RegExp,
+  ) => {
+    const username = extractUsername(raw, urlPattern)
+    const wasUrl = username !== raw.trim() && raw.trim().length > 0
+    setUsernames(prev => ({ ...prev, [key]: username }))
+    setFieldUrlHints(prev => ({ ...prev, [key]: wasUrl }))
+  }, [])
+
 
   /* evaluation */
   const runEval = useCallback(async () => {
@@ -237,10 +265,10 @@ export default function Page() {
       )
 
       const res = await fetch(`${API_URL}/evaluate`, {
-        method:  'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          candidate_name:   candidateName.trim(),
+        body: JSON.stringify({
+          candidate_name: candidateName.trim(),
           job_requirements: requirements,
           ...usernamePayload,
         }),
@@ -265,6 +293,70 @@ export default function Page() {
       setLoading(false)
     }
   }, [candidateName, requirements, usernames])
+
+  // ── Stats Calculations for Dashboard ──
+  const gh = result?.source_details?.github
+  const ghFound = !!(gh && gh.profile_url)
+  const ghStars = gh?.contribution_activity?.total_stars ?? 0
+  const ghFollowers = gh?.contribution_activity?.followers ?? 0
+  const ghRepos = gh?.contribution_activity?.public_repos ?? gh?.repos?.length ?? 0
+  const ghLanguages = gh?.top_languages ?? []
+  const ghLatestPush = gh?.latest_push ?? null
+
+  const li = result?.source_details?.linkedin
+  const liFound = !!(li && li.profile_url)
+  const liRole = li?.current_role ?? null
+  const liCompany = li?.company ?? null
+  const liSummary = li?.summary ?? null
+
+  const gs = result?.source_details?.google_scholar
+  const rg = result?.source_details?.researchgate
+  const acadFound = !!((gs && gs.profile_url) || (rg && rg.profile_url))
+  const citations = Number(gs?.citations ?? rg?.citations ?? 0)
+  const pubs = [...(gs?.publications ?? []), ...(rg?.publications ?? [])]
+  const pubCount = pubs.length
+  const rawInterests = gs?.interests ?? rg?.interests ?? []
+  const interests: string[] = typeof rawInterests === 'string'
+    ? rawInterests.split(',').map((s: string) => s.trim()).filter(Boolean)
+    : Array.isArray(rawInterests)
+      ? rawInterests.map((s: any) => String(s).trim()).filter(Boolean)
+      : []
+
+  const devto = result?.source_details?.devto
+  const medium = result?.source_details?.medium
+  const hashnode = result?.source_details?.hashnode
+  const kaggle = result?.source_details?.kaggle
+  const devtoCount = devto?.articles?.length ?? 0
+  const mediumCount = medium?.articles?.length ?? 0
+  const hashnodeCount = hashnode?.articles?.length ?? 0
+  const totalBlogs = devtoCount + mediumCount + hashnodeCount
+  const blogsFound = !!((devto && devto.profile_url) || (medium && medium.profile_url) || (hashnode && hashnode.profile_url))
+
+  const allCommunityWorks = [
+    ...(devto?.articles ?? []),
+    ...(medium?.articles ?? []),
+    ...(hashnode?.articles ?? []),
+    ...(kaggle?.writeups ?? []),
+    ...(kaggle?.pinned_works ?? [])
+  ]
+
+  const kwStats = (() => {
+    if (!result || !result.source_details) return { total: 0, matched: 0, percentage: 0, list: [] as { word: string; hit: boolean }[] }
+    const hits: Record<string, boolean> = {}
+    Object.values(result.source_details).forEach((src: any) => {
+      if (src && src.keyword_hits) {
+        Object.entries(src.keyword_hits).forEach(([k, v]) => {
+          if (v) hits[k] = true
+          else if (hits[k] === undefined) hits[k] = false
+        })
+      }
+    })
+    const list = Object.entries(hits).map(([word, hit]) => ({ word, hit }))
+    const total = list.length
+    const matched = list.filter(x => x.hit).length
+    const percentage = total > 0 ? Math.round((matched / total) * 100) : 0
+    return { total, matched, percentage, list }
+  })()
 
   /* ── Render ── */
   return (
@@ -324,7 +416,7 @@ export default function Page() {
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                   <i className="ti ti-at" aria-hidden style={{ fontSize: 12 }} />
-                  Source usernames (optional)
+                  Username or Profile URL (optional)
                 </span>
                 <i className={`ti ${showUsernames ? 'ti-chevron-up' : 'ti-chevron-down'}`} aria-hidden style={{ fontSize: 13 }} />
               </button>
@@ -332,8 +424,8 @@ export default function Page() {
               {showUsernames && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
                   <p style={{ fontSize: 10.5, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 2 }}>
-                    Exact handles help matching beat guesses from the name.
-                    Google Scholar is still searched by full name.
+                    Enter a username or paste a full profile URL — both work for all platforms,
+                    including Google Scholar (user ID or full URL) and ResearchGate (profile slug or full URL).
                   </p>
                   {USERNAME_FIELDS.map(f => (
                     <div key={f.key}>
@@ -345,8 +437,14 @@ export default function Page() {
                         className="field-input"
                         placeholder={f.placeholder}
                         value={usernames[f.key]}
-                        onChange={e => setUsernames(prev => ({ ...prev, [f.key]: e.target.value }))}
+                        onChange={e => handleUsernameChange(f.key, e.target.value, f.urlPattern)}
                       />
+                      {fieldUrlHints[f.key] && (
+                        <div style={{ marginTop: 4, fontSize: 10.5, color: 'var(--green)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <i className="ti ti-circle-check" aria-hidden style={{ fontSize: 11 }} />
+                          URL detected — username extracted
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -354,6 +452,40 @@ export default function Page() {
             </div>
 
             <div className="section-label">Job requirements</div>
+
+            {/* Trending Suggestions */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 10.5, color: 'var(--slate)', marginBottom: 6 }}>Trending Requirements</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                {['Machine Learning', 'Python', 'React', 'AWS', 'Node.js', 'System Design'].map(skill => {
+                  const isSelected = requirements.includes(skill)
+                  return (
+                    <button
+                      key={skill}
+                      onClick={() => {
+                        if (!isSelected) setRequirements(prev => [...prev, skill])
+                      }}
+                      style={{
+                        background: isSelected ? 'var(--gold-dim)' : 'var(--navy4)',
+                        border: `0.5px solid ${isSelected ? 'var(--gold)' : 'var(--border)'}`,
+                        color: isSelected ? 'var(--navy)' : 'var(--slate2)',
+                        padding: '3px 8px',
+                        borderRadius: 12,
+                        fontSize: 10,
+                        cursor: isSelected ? 'default' : 'pointer',
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}
+                      disabled={isSelected}
+                    >
+                      {skill} <i className={`ti ${isSelected ? 'ti-check' : 'ti-plus'}`} style={{ fontSize: 9 }} />
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
 
             {/* Requirement list */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
@@ -372,12 +504,13 @@ export default function Page() {
               ))}
             </div>
 
-            {/* Add requirement */}
+            {/* Add custom requirement */}
+            <div style={{ fontSize: 10.5, color: 'var(--slate)', marginBottom: 6, marginTop: 4 }}>Other Requirements</div>
             <div style={{ display: 'flex', gap: 6 }}>
               <input
                 className="field-input"
                 style={{ flex: 1 }}
-                placeholder="Add a requirement..."
+                placeholder="Specify other requirements..."
                 value={reqInput}
                 onChange={e => setReqInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && addReq()}
@@ -450,6 +583,23 @@ export default function Page() {
             {result && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
 
+                {/* AI scoring warning banner */}
+                {result.scoring_failed && (
+                  <div style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 10,
+                    padding: '10px 14px', borderRadius: 8,
+                    background: 'rgba(239,159,39,0.08)', border: '0.5px solid rgba(239,159,39,0.35)',
+                  }}>
+                    <i className="ti ti-alert-triangle" aria-hidden style={{ fontSize: 16, color: 'var(--amber)', marginTop: 1, flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--amber)' }}>AI scoring unavailable</div>
+                      <div style={{ fontSize: 11, color: 'var(--slate)', marginTop: 2, lineHeight: 1.5 }}>
+                        Public profile data was collected and is shown below. Configure your AI API key to enable dimension scoring.
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Candidate header */}
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -457,57 +607,71 @@ export default function Page() {
                     <div>
                       <div style={{ fontSize: 16, fontWeight: 500 }}>{result.candidate_name}</div>
                       <div style={{ fontSize: 12, color: 'var(--slate)', marginTop: 2 }}>
-                        Evaluated across {Object.keys(result.dimensions).length} dimensions · {requirements.length} requirements
+                        {result.scoring_failed
+                          ? `Public footprint search · ${requirements.length} requirements`
+                          : `Evaluated across ${Object.keys(result.dimensions).length} dimensions · ${requirements.length} requirements`
+                        }
                       </div>
                     </div>
                   </div>
-                  <div style={styles.scorePill}>
-                    <div style={{ fontSize: 28, fontWeight: 500, color: 'var(--gold2)', lineHeight: 1 }}>
-                      {Math.round(result.rescoring_score)}
+                  {result.scoring_failed ? (
+                    <div style={{ ...styles.scorePill, borderColor: 'rgba(239,159,39,0.4)', background: 'rgba(239,159,39,0.06)' }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--amber)', lineHeight: 1 }}>N/A</div>
+                      <div style={{ fontSize: 10, color: 'rgba(239,159,39,0.6)', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 2 }}>Score</div>
                     </div>
-                    <div style={{ fontSize: 10, color: 'var(--gold-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 2 }}>
-                      Overall
+                  ) : (
+                    <div style={styles.scorePill}>
+                      <div style={{ fontSize: 28, fontWeight: 500, color: 'var(--gold2)', lineHeight: 1 }}>
+                        {Math.round(result.rescoring_score)}
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--gold-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 2 }}>
+                        Overall
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
-                {/* Radar chart */}
-                <div style={{ display: 'flex', justifyContent: 'center' }}>
-                  <canvas ref={canvasRef} width={280} height={280} aria-label="Radar chart of 9 dimension scores" />
-                </div>
-
-                {/* Dimension cards */}
-                <div>
-                  <div className="section-label">Dimension scores</div>
-                  <div style={styles.dimGrid}>
-                    {DIMS.map(d => {
-                      const val = result.dimensions[d.key as keyof DimensionScores] ?? 0
-                      const cl  = getColorClass(val, d.key === 'risk_indicators')
-                      const color = getScoreColor(val, d.key === 'risk_indicators')
-                      return (
-                        <div
-                          key={d.key}
-                          style={{
-                            ...styles.dimCard,
-                            ...(d.primary ? styles.dimCardPrimary : {}),
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
-                            <span style={{ fontSize: 11, color: 'var(--slate2)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <i className={`ti ${d.icon}`} aria-hidden style={{ fontSize: 12 }} />
-                              {d.label}
-                              {d.subtracted && <span style={{ fontSize: 9, color: 'var(--muted)', marginLeft: 2 }}>(–)</span>}
-                            </span>
-                            <span style={{ fontSize: 13, fontWeight: 500, color }}>{val}</span>
-                          </div>
-                          <div className="bar-track">
-                            <div className={`bar-fill ${cl}`} style={{ width: `${val}%` }} />
-                          </div>
-                        </div>
-                      )
-                    })}
+                {/* Radar chart — only when AI scores are available */}
+                {!result.scoring_failed && (
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <canvas ref={canvasRef} width={280} height={280} aria-label="Radar chart of 9 dimension scores" />
                   </div>
-                </div>
+                )}
+
+                {/* Dimension cards — only when AI scores are available */}
+                {!result.scoring_failed && (
+                  <div>
+                    <div className="section-label">Dimension scores</div>
+                    <div style={styles.dimGrid}>
+                      {DIMS.map(d => {
+                        const val = result.dimensions[d.key as keyof DimensionScores] ?? 0
+                        const cl = getColorClass(val, d.key === 'risk_indicators')
+                        const color = getScoreColor(val, d.key === 'risk_indicators')
+                        return (
+                          <div
+                            key={d.key}
+                            style={{
+                              ...styles.dimCard,
+                              ...(d.primary ? styles.dimCardPrimary : {}),
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
+                              <span style={{ fontSize: 11, color: 'var(--slate2)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <i className={`ti ${d.icon}`} aria-hidden style={{ fontSize: 12 }} />
+                                {d.label}
+                                {d.subtracted && <span style={{ fontSize: 9, color: 'var(--muted)', marginLeft: 2 }}>(–)</span>}
+                              </span>
+                              <span style={{ fontSize: 13, fontWeight: 500, color }}>{val}</span>
+                            </div>
+                            <div className="bar-track">
+                              <div className={`bar-fill ${cl}`} style={{ width: `${val}%` }} />
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Source chips */}
                 <div>
@@ -537,6 +701,311 @@ export default function Page() {
                   </div>
                 </div>
 
+                {/* ── Analytical Dashboard ── */}
+                <div style={{ marginTop: 8 }}>
+                  <div className="section-label">Public Footprint Analytics</div>
+                  <div style={styles.dbGrid}>
+
+                    {/* GitHub Card */}
+                    <div style={styles.dbCard}>
+                      <div style={styles.dbCardHeader}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <i className="ti ti-brand-github" style={{ fontSize: 18, color: 'var(--gold2)' }} />
+                          <span style={{ fontSize: 13, fontWeight: 600 }}>GitHub Activity</span>
+                        </div>
+                        {ghFound ? (
+                          <span className="badge badge-green" style={{ fontSize: 9, padding: '2px 6px' }}>Active</span>
+                        ) : (
+                          <span className="badge" style={{ fontSize: 9, padding: '2px 6px', background: 'var(--border2)', color: 'var(--muted)' }}>Not Found</span>
+                        )}
+                      </div>
+
+                      {ghFound ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10 }}>
+                          <div style={styles.dbStatRow}>
+                            <div style={styles.dbStatCol}>
+                              <span style={styles.dbStatVal}>{ghRepos}</span>
+                              <span style={styles.dbStatLabel}>Repos</span>
+                            </div>
+                            <div style={styles.dbStatCol}>
+                              <span style={styles.dbStatVal}>{ghStars}</span>
+                              <span style={styles.dbStatLabel}>Stars</span>
+                            </div>
+                            <div style={styles.dbStatCol}>
+                              <span style={styles.dbStatVal}>{ghFollowers}</span>
+                              <span style={styles.dbStatLabel}>Followers</span>
+                            </div>
+                          </div>
+
+                          {ghLanguages.length > 0 && (
+                            <div>
+                              <div style={styles.dbSubLabel}>Top Languages</div>
+                              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                                {ghLanguages.slice(0, 4).map((lang: string) => (
+                                  <span key={lang} style={styles.langBadge}>
+                                    {lang}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {ghLatestPush && (
+                            <div style={{ fontSize: 11, color: 'var(--slate)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <i className="ti ti-history" style={{ fontSize: 12 }} />
+                              Latest Push: {ghLatestPush}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={styles.dbCardEmpty}>
+                          No public GitHub activity data was retrieved.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Career & Role Card (LinkedIn) */}
+                    <div style={styles.dbCard}>
+                      <div style={styles.dbCardHeader}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <i className="ti ti-briefcase" style={{ fontSize: 18, color: 'var(--gold2)' }} />
+                          <span style={{ fontSize: 13, fontWeight: 600 }}>LinkedIn Profile</span>
+                        </div>
+                        {liFound ? (
+                          <span className="badge badge-green" style={{ fontSize: 9, padding: '2px 6px' }}>Matched</span>
+                        ) : (
+                          <span className="badge" style={{ fontSize: 9, padding: '2px 6px', background: 'var(--border2)', color: 'var(--muted)' }}>Not Found</span>
+                        )}
+                      </div>
+
+                      {liFound ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
+                              {liRole ?? 'LinkedIn Profile Confirmed'}
+                            </div>
+                            {liCompany && (
+                              <div style={{ fontSize: 11.5, color: 'var(--gold2)', marginTop: 2 }}>
+                                @ {liCompany}
+                              </div>
+                            )}
+                          </div>
+
+                          {liSummary && (
+                            <p style={{ fontSize: 11, color: 'var(--slate2)', lineHeight: 1.5, fontStyle: 'italic' }}>
+                              "{liSummary.length > 140 ? liSummary.slice(0, 140) + '...' : liSummary}"
+                            </p>
+                          )}
+
+                          {li?.profile_url && (
+                            <a
+                              href={li.profile_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 4,
+                                fontSize: 11, color: 'var(--gold2)', textDecoration: 'none',
+                                marginTop: 4, fontWeight: 500,
+                              }}
+                            >
+                              View Profile <i className="ti ti-external-link" style={{ fontSize: 12 }} />
+                            </a>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={styles.dbCardEmpty}>
+                          No public LinkedIn profile data matched.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Academic Signal Card (Scholar + ResearchGate) */}
+                    <div style={styles.dbCard}>
+                      <div style={styles.dbCardHeader}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <i className="ti ti-school" style={{ fontSize: 18, color: 'var(--gold2)' }} />
+                          <span style={{ fontSize: 13, fontWeight: 600 }}>Academic Footprint</span>
+                        </div>
+                        {acadFound ? (
+                          <span className="badge badge-green" style={{ fontSize: 9, padding: '2px 6px' }}>Found</span>
+                        ) : (
+                          <span className="badge" style={{ fontSize: 9, padding: '2px 6px', background: 'var(--border2)', color: 'var(--muted)' }}>Not Found</span>
+                        )}
+                      </div>
+
+                      {acadFound ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+                          <div style={styles.dbStatRow}>
+                            <div style={styles.dbStatCol}>
+                              <span style={styles.dbStatVal}>{citations}</span>
+                              <span style={styles.dbStatLabel}>Citations</span>
+                            </div>
+                            <div style={styles.dbStatCol}>
+                              <span style={styles.dbStatVal}>{pubCount}</span>
+                              <span style={styles.dbStatLabel}>Publications</span>
+                            </div>
+                          </div>
+
+                          {interests.length > 0 && (
+                            <div>
+                              <div style={styles.dbSubLabel}>Research Focus</div>
+                              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                                {interests.slice(0, 3).map((item: string) => (
+                                  <span key={item} style={styles.interestBadge}>
+                                    {item}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {pubs.length > 0 && (
+                            <div style={{ marginTop: 6 }}>
+                              <div style={styles.dbSubLabel}>Top Publications</div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                                {pubs.slice(0, 3).map((pub: any, idx: number) => {
+                                  const targetUrl = pub.url || `https://scholar.google.com/scholar?q=${encodeURIComponent(pub.title || '')}`
+                                  return (
+                                  <a
+                                    key={idx}
+                                    href={targetUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    style={{
+                                      fontSize: 11,
+                                      color: 'var(--gold2)',
+                                      textDecoration: 'underline',
+                                      display: 'block',
+                                      whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    <i className="ti ti-file-text" style={{ marginRight: 4 }} />
+                                    {pub.title}
+                                  </a>
+                                )})}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={styles.dbCardEmpty}>
+                          No papers, citations or ResearchGate profile found.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Blogging & Writing Card */}
+                    <div style={styles.dbCard}>
+                      <div style={styles.dbCardHeader}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <i className="ti ti-pencil" style={{ fontSize: 18, color: 'var(--gold2)' }} />
+                          <span style={{ fontSize: 13, fontWeight: 600 }}>Developer Community</span>
+                        </div>
+                        {blogsFound || result?.source_details?.kaggle?.profile_url ? (
+                          <span className="badge badge-green" style={{ fontSize: 9, padding: '2px 6px' }}>Active</span>
+                        ) : (
+                          <span className="badge" style={{ fontSize: 9, padding: '2px 6px', background: 'var(--border2)', color: 'var(--muted)' }}>Not Found</span>
+                        )}
+                      </div>
+
+                      {(blogsFound || result?.source_details?.kaggle?.profile_url) ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+                          <div style={styles.dbStatRow}>
+                            <div style={styles.dbStatCol}>
+                              <span style={styles.dbStatVal}>{totalBlogs}</span>
+                              <span style={styles.dbStatLabel}>Blog Posts</span>
+                            </div>
+                            <div style={styles.dbStatCol}>
+                              <span style={{ ...styles.dbStatVal, fontSize: 13, color: result?.source_details?.kaggle?.profile_url ? 'var(--green)' : 'var(--muted)', marginTop: 6, display: 'inline-block' }}>
+                                {result?.source_details?.kaggle?.profile_url ? 'Found' : 'None'}
+                              </span>
+                              <span style={styles.dbStatLabel}>Kaggle profile</span>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 4 }}>
+                            {devtoCount > 0 && <span style={styles.blogPlatformBadge}>Dev.to ({devtoCount})</span>}
+                            {mediumCount > 0 && <span style={styles.blogPlatformBadge}>Medium ({mediumCount})</span>}
+                            {hashnodeCount > 0 && <span style={styles.blogPlatformBadge}>Hashnode ({hashnodeCount})</span>}
+                          </div>
+
+                          {allCommunityWorks.length > 0 && (
+                            <div style={{ marginTop: 6 }}>
+                              <div style={styles.dbSubLabel}>Featured Work & Articles</div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                                {allCommunityWorks.slice(0, 4).map((work: any, idx: number) => {
+                                  const targetUrl = work.url || `https://www.google.com/search?q=${encodeURIComponent(work.title || '')}`
+                                  return (
+                                  <a
+                                    key={idx}
+                                    href={targetUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    style={{
+                                      fontSize: 11,
+                                      color: 'var(--gold2)',
+                                      textDecoration: 'underline',
+                                      display: 'block',
+                                      whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    <i className="ti ti-link" style={{ marginRight: 4 }} />
+                                    {work.title}
+                                  </a>
+                                )})}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={styles.dbCardEmpty}>
+                          No active developer blogging or Kaggle profile found.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Keyword Alignment Banner */}
+                  {kwStats.total > 0 && (
+                    <div style={styles.kwAlignmentBox}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <i className="ti ti-target" style={{ fontSize: 16, color: 'var(--gold2)' }} />
+                          <span style={{ fontSize: 12.5, fontWeight: 500 }}>Job Description Keyword Relevance</span>
+                        </div>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--gold2)' }}>
+                          {kwStats.matched} / {kwStats.total} matched ({kwStats.percentage}%)
+                        </span>
+                      </div>
+
+                      <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 2, overflow: 'hidden', marginBottom: 12 }}>
+                        <div style={{ height: '100%', width: `${kwStats.percentage}%`, background: 'var(--gold2)', borderRadius: 2, transition: 'width 1s ease-out' }} />
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {kwStats.list.map(kw => (
+                          <span
+                            key={kw.word}
+                            style={{
+                              ...styles.kwChip,
+                              ...(kw.hit ? styles.kwChipHit : styles.kwChipMiss)
+                            }}
+                          >
+                            <i className={`ti ${kw.hit ? 'ti-circle-check' : 'ti-circle-x'}`} aria-hidden style={{ fontSize: 11 }} />
+                            {kw.word}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* AI reasoning */}
                 <div>
                   <div className="section-label">AI reasoning</div>
@@ -551,6 +1020,29 @@ export default function Page() {
                         </div>
                       )
                     })}
+                  </div>
+                </div>
+
+                {/* ── AI Summary (placeholder — backend TBD) ── */}
+                <div>
+                  <div className="section-label">AI Summary</div>
+                  <div style={styles.aiSummaryBox}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                      <div style={styles.aiSummaryIcon}>
+                        <i className="ti ti-robot" aria-hidden style={{ fontSize: 18, color: 'var(--gold2)' }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>AI-generated Candidate Summary</div>
+                        <div style={{ fontSize: 11, color: 'var(--slate)', marginTop: 1 }}>Powered by your chosen AI model</div>
+                      </div>
+                      <span className="badge" style={{ marginLeft: 'auto', fontSize: 9, padding: '2px 8px', background: 'rgba(201,168,76,0.08)', border: '0.5px solid var(--gold-dim)', color: 'var(--gold-dim)' }}>Coming soon</span>
+                    </div>
+                    <div style={styles.aiSummaryPlaceholder}>
+                      <i className="ti ti-sparkles" aria-hidden style={{ fontSize: 28, color: 'var(--gold-dim)', marginBottom: 8 }} />
+                      <p style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center', lineHeight: 1.7, maxWidth: 280 }}>
+                        A concise natural-language summary of this candidate's public footprint will appear here once an AI model is configured.
+                      </p>
+                    </div>
                   </div>
                 </div>
 
@@ -737,5 +1229,151 @@ const styles: Record<string, React.CSSProperties> = {
   reasonItem: {
     padding: '4px 0',
     borderBottom: '0.5px solid var(--border2)',
+  },
+  dbGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+    gap: '12px',
+    marginBottom: '16px',
+  },
+  dbCard: {
+    background: 'var(--navy3)',
+    border: '0.5px solid var(--border)',
+    borderRadius: '10px',
+    padding: '14px',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+    minHeight: '140px',
+  },
+  dbCardHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottom: '0.5px solid var(--border2)',
+    paddingBottom: '8px',
+    marginBottom: '4px',
+  },
+  dbStatRow: {
+    display: 'flex',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    textAlign: 'center',
+    background: 'rgba(255,255,255,0.02)',
+    borderRadius: '6px',
+    padding: '6px 0',
+  },
+  dbStatCol: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+  },
+  dbStatVal: {
+    fontSize: '18px',
+    fontWeight: '600',
+    color: 'var(--gold2)',
+    lineHeight: '1.2',
+  },
+  dbStatLabel: {
+    fontSize: '9.5px',
+    color: 'var(--slate)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    marginTop: '2px',
+  },
+  dbSubLabel: {
+    fontSize: '9.5px',
+    color: 'var(--slate)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    marginBottom: '4px',
+  },
+  langBadge: {
+    fontSize: '9.5px',
+    background: 'var(--navy4)',
+    border: '0.5px solid var(--border)',
+    color: 'var(--slate2)',
+    padding: '2px 6px',
+    borderRadius: '4px',
+  },
+  interestBadge: {
+    fontSize: '9.5px',
+    background: 'rgba(201, 168, 76, 0.08)',
+    border: '0.5px solid var(--gold-border)',
+    color: 'var(--gold2)',
+    padding: '2px 6px',
+    borderRadius: '4px',
+  },
+  blogPlatformBadge: {
+    fontSize: '9.5px',
+    background: 'var(--border2)',
+    border: '0.5px solid var(--border)',
+    color: 'var(--slate2)',
+    padding: '2px 6px',
+    borderRadius: '4px',
+  },
+  dbCardEmpty: {
+    fontSize: '11px',
+    color: 'var(--muted)',
+    textAlign: 'center',
+    padding: '20px 10px',
+    fontStyle: 'italic',
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  kwAlignmentBox: {
+    background: 'var(--navy3)',
+    border: '0.5px solid var(--border)',
+    borderRadius: '10px',
+    padding: '14px',
+    marginBottom: '16px',
+  },
+  kwChip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    fontSize: '10.5px',
+    padding: '3px 8px',
+    borderRadius: '5px',
+  },
+  kwChipHit: {
+    background: 'var(--green-bg)',
+    border: '0.5px solid var(--green-border)',
+    color: 'var(--green)',
+  },
+  kwChipMiss: {
+    background: 'rgba(255,255,255,0.02)',
+    border: '0.5px solid var(--border)',
+    color: 'var(--muted)',
+  },
+  aiSummaryBox: {
+    background: 'var(--navy3)',
+    border: '0.5px solid var(--border)',
+    borderRadius: '10px',
+    padding: '16px',
+  },
+  aiSummaryIcon: {
+    width: 36,
+    height: 36,
+    background: 'rgba(201,168,76,0.10)',
+    border: '0.5px solid var(--gold-border)',
+    borderRadius: 8,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  aiSummaryPlaceholder: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '24px 16px',
+    borderRadius: 8,
+    background: 'rgba(255,255,255,0.02)',
+    border: '0.5px dashed var(--border)',
+    minHeight: 110,
   },
 }

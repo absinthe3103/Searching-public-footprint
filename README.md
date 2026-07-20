@@ -21,8 +21,25 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Running the backend
-'''cmd
-uvicorn src.logic:app --reload
+uvicorn logic:app --reload --port 8000
+
+## Testing Program
+
+# One name for all
+python test.py --name "username" --req "Python"
+
+# Different per platform
+python test.py --github "u1" --linkedin "u2" --scholar "u3"
+
+# Mix
+python test.py --name "default" --github "custom"
+
+# Mock only
+python test.py --mock-only --github "username"
+
+# Full test
+python test.py --github "u1" --linkedin "u2" --req "Python" --req "ML"
+```
 
 ## Learn More
 
