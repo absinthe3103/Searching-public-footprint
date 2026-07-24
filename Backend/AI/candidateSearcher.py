@@ -217,10 +217,20 @@ def search_github(name: str, keywords: list, identifier: str = None) -> dict:
         "summary": "Not found"
     }
 
-    # ── No identifier supplied → skip immediately ──────────
+    # ── No identifier supplied → guess usernames ──────────
     if not handle:
-        print("\n[GitHub] No identifier provided — skipping.")
-        out["summary"] = "Not provided — skipped"
+        print("\n[GitHub] No identifier provided — guessing...")
+        guesses = username_guesses(name)
+        possible_urls = []
+        for g in guesses:
+            print(f"  [GitHub] Trying guess '{g}' ...")
+            p = safe_get(f"{GITHUB_API}/users/{g}")
+            if p and p.status_code == 200:
+                possible_urls.append(p.json().get("html_url", f"https://github.com/{g}"))
+                print(f"    -> Found possible profile: {possible_urls[-1]}")
+            time.sleep(DELAY)
+        out["possible_profiles"] = possible_urls
+        out["summary"] = "Not provided — guessed"
         return out
 
     print(f"\n[GitHub] Trying direct username '{handle}' ...")
@@ -330,10 +340,24 @@ def search_linkedin(name: str, keywords: list, identifier: str = None) -> dict:
         "linkedin_from_github": None,
     }
 
-    # ── No identifier supplied → skip immediately ──────────
+    # ── No identifier supplied → guess usernames ──────────
     if not handle:
-        print("\n[LinkedIn] No identifier provided — skipping.")
-        out["summary"] = "Not provided — skipped"
+        print("\n[LinkedIn] No identifier provided — guessing...")
+        guesses = username_guesses(name)
+        possible_urls = []
+        for g in guesses:
+            print(f"  [LinkedIn] Trying guess '{g}' ...")
+            query = f'site:linkedin.com/in "{g}"'
+            res = search_web_snippets(query)
+            if res:
+                for r in res:
+                    if "linkedin.com/in/" in r["url"]:
+                        possible_urls.append(r["url"])
+                        print(f"    -> Found possible profile: {r['url']}")
+                        break
+            time.sleep(DELAY)
+        out["possible_profiles"] = possible_urls
+        out["summary"] = "Not provided — guessed"
         return out
 
     slug = handle.rstrip("/")
@@ -350,7 +374,7 @@ def search_linkedin(name: str, keywords: list, identifier: str = None) -> dict:
         text = f"{res['title']} {res['snippet']}"
         all_text += f" {text}"
         if "linkedin.com/in/" in href and not out["current_role"]:
-            match = re.search(r"([A-Z][^|\u00b7\n]+?)\s+(?:at|@|\u00b7|\|)\s+([A-Z][^\n\u00b7|]+)", text)
+            match = re.search(r"(?:Experience[:\s\-]+)?([A-Z][^|\u00b7\-\u2013\n]+?)\s+(?:at|@|\u00b7|\||\-|\u2013)\s+([A-Z][^\n\u00b7|\-\u2013]+)", text)
             if match:
                 out["current_role"] = match.group(1).strip()
                 out["company"]      = match.group(2).strip()
@@ -395,10 +419,21 @@ def search_google_scholar(name: str, keywords: list, identifier: str = None) -> 
         "source_used": None,
     }
 
-    # ── No identifier supplied → skip immediately ──────────
+    # ── No identifier supplied → guess by name ──────────
     if not identifier or not identifier.strip():
-        print("\n[Google Scholar] No identifier provided — skipping.")
-        out["summary"] = "Not provided — skipped"
+        print("\n[Google Scholar] No identifier provided — guessing by name...")
+        possible_urls = []
+        try:
+            from scholarly import scholarly as _scholarly
+            search_query = _scholarly.search_author(name)
+            first_author = next(search_query, None)
+            if first_author:
+                possible_urls.append(f"https://scholar.google.com/citations?user={first_author['scholar_id']}")
+                print(f"    -> Found possible profile: {possible_urls[-1]}")
+        except Exception as e:
+            if DEBUG: print(f"    [debug] Scholar guessing failed: {e}")
+        out["possible_profiles"] = possible_urls
+        out["summary"] = "Not provided — guessed"
         return out
 
     # Parse both Semantic Scholar and Google Scholar URL patterns
@@ -587,10 +622,23 @@ def search_researchgate(name: str, keywords: list, identifier: str = None) -> di
         "source_used": None,
     }
 
-    # ── No identifier supplied → skip immediately ──────────
+    # ── No identifier supplied → guess usernames ──────────
     if not identifier or not identifier.strip():
-        print("\n[ResearchGate] No identifier provided — skipping.")
-        out["summary"] = "Not provided — skipped"
+        print("\n[ResearchGate] No identifier provided — guessing...")
+        guesses = username_guesses(name)
+        possible_urls = []
+        for g in guesses:
+            print(f"  [ResearchGate] Trying guess '{g}' ...")
+            res = search_web_snippets(f'site:researchgate.net/profile "{g}"')
+            if res:
+                for r in res:
+                    if "researchgate.net/profile/" in r["url"]:
+                        possible_urls.append(r["url"])
+                        print(f"    -> Found possible profile: {r['url']}")
+                        break
+            time.sleep(DELAY)
+        out["possible_profiles"] = possible_urls
+        out["summary"] = "Not provided — guessed"
         return out
 
     orcid_handle     = parse_identifier(identifier, "orcid")
@@ -745,10 +793,20 @@ def search_kaggle(name: str, keywords: list, identifier: str = None) -> dict:
         "writeups": [],
     }
 
-    # ── No identifier supplied → skip immediately ──────────
+    # ── No identifier supplied → guess usernames ──────────
     if not handle:
-        print("\n[Kaggle] No identifier provided — skipping.")
-        out["summary"] = "Not provided — skipped"
+        print("\n[Kaggle] No identifier provided — guessing...")
+        guesses = username_guesses(name)
+        possible_urls = []
+        for g in guesses:
+            print(f"  [Kaggle] Trying guess '{g}' ...")
+            r = safe_get(f"https://www.kaggle.com/{g}")
+            if r and r.status_code == 200:
+                possible_urls.append(f"https://www.kaggle.com/{g}")
+                print(f"    -> Found possible profile: {possible_urls[-1]}")
+            time.sleep(DELAY)
+        out["possible_profiles"] = possible_urls
+        out["summary"] = "Not provided — guessed"
         return out
 
     print(f"\n[Kaggle] Trying identifier '{handle}' ...")
@@ -831,10 +889,20 @@ def search_devto(name: str, keywords: list, identifier: str = None) -> dict:
         "top_topics": [],
     }
 
-    # ── No identifier supplied → skip immediately ──────────
+    # ── No identifier supplied → guess usernames ──────────
     if not handle:
-        print("\n[Dev.to] No identifier provided — skipping.")
-        out["summary"] = "Not provided — skipped"
+        print("\n[Dev.to] No identifier provided — guessing...")
+        guesses = username_guesses(name)
+        possible_urls = []
+        for g in guesses:
+            print(f"  [Dev.to] Trying guess '{g}' ...")
+            r = safe_get(f"https://dev.to/api/articles?username={g}&per_page=1")
+            if r and r.status_code == 200:
+                possible_urls.append(f"https://dev.to/{g}")
+                print(f"    -> Found possible profile: {possible_urls[-1]}")
+            time.sleep(DELAY)
+        out["possible_profiles"] = possible_urls
+        out["summary"] = "Not provided — guessed"
         return out
 
     print(f"\n[Dev.to] Trying identifier '{handle}' ...")
@@ -900,10 +968,20 @@ def search_medium(name: str, keywords: list, identifier: str = None) -> dict:
     }
     all_text = ""
 
-    # ── No identifier supplied → skip immediately ──────────
+    # ── No identifier supplied → guess usernames ──────────
     if not handle:
-        print("\n[Medium] No identifier provided — skipping.")
-        out["summary"] = "Not provided — skipped"
+        print("\n[Medium] No identifier provided — guessing...")
+        guesses = username_guesses(name)
+        possible_urls = []
+        for g in guesses:
+            print(f"  [Medium] Trying guess '{g}' ...")
+            r = safe_get(f"https://medium.com/@{g}")
+            if r and r.status_code == 200:
+                possible_urls.append(f"https://medium.com/@{g}")
+                print(f"    -> Found possible profile: {possible_urls[-1]}")
+            time.sleep(DELAY)
+        out["possible_profiles"] = possible_urls
+        out["summary"] = "Not provided — guessed"
         return out
 
     candidate_url = f"https://medium.com/@{handle}"
@@ -976,10 +1054,20 @@ def search_hashnode(name: str, keywords: list, identifier: str = None) -> dict:
         "top_topics": [],
     }
 
-    # ── No identifier supplied → skip immediately ──────────
+    # ── No identifier supplied → guess usernames ──────────
     if not handle:
-        print("\n[Hashnode] No identifier provided — skipping.")
-        out["summary"] = "Not provided — skipped"
+        print("\n[Hashnode] No identifier provided — guessing...")
+        guesses = username_guesses(name)
+        possible_urls = []
+        for g in guesses:
+            print(f"  [Hashnode] Trying guess '{g}' ...")
+            r = safe_get(f"https://hashnode.com/@{g}")
+            if r and r.status_code == 200:
+                possible_urls.append(f"https://hashnode.com/@{g}")
+                print(f"    -> Found possible profile: {possible_urls[-1]}")
+            time.sleep(DELAY)
+        out["possible_profiles"] = possible_urls
+        out["summary"] = "Not provided — guessed"
         return out
 
     print(f"\n[Hashnode] Trying identifier '{handle}' ...")

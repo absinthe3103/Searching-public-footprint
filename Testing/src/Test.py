@@ -36,6 +36,7 @@ import sys
 import os
 import time
 import json
+import re
 from datetime import datetime, timedelta
 
 # Make candidateSearcher importable whether it lives next to this script

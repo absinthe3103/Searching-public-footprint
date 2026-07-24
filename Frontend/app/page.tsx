@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useCallback } from 'react'
+import { useRef, useState, useCallback, useEffect } from 'react'
 
 /* ── Types ─────────────────────────────────────────────── */
 interface DimensionScores {
@@ -35,6 +35,12 @@ interface EvaluateResponse {
   source_details?: Record<string, any>
   db_id: number
   scoring_failed?: boolean
+  status?: string
+  fit_direction?: string
+  whats_changed_summary?: string
+  re_engage_flag?: boolean
+  original_role?: string
+  original_tier?: string
 }
 
 /* ── Constants ──────────────────────────────────────────── */
@@ -200,12 +206,18 @@ function drawRadar(canvas: HTMLCanvasElement, scores: DimensionScores) {
    PAGE COMPONENT
 ══════════════════════════════════════════════════════════ */
 export default function Page() {
+  const [view, setView] = useState<'search' | 'talent_radar'>('search')
   const [candidateName, setCandidateName] = useState('')
-  const [requirements, setRequirements] = useState<string[]>([])
+  const [originalRole, setOriginalRole] = useState('Senior Backend Engineer')
+  const [originalTier, setOriginalTier] = useState('Tier 1')
+  const [requirements, setRequirements] = useState<string[]>([
+    'Python', 'Machine Learning', 'API Design'
+  ])
   const [reqInput, setReqInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingStep, setLoadingStep] = useState(0)
   const [result, setResult] = useState<EvaluateResponse | null>(null)
+  const [candidates, setCandidates] = useState<any[]>([])
   const [error, setError] = useState<string | null>(null)
   const [usernames, setUsernames] = useState<Record<UsernameKey, string>>({
     github_username: '', linkedin_username: '',
@@ -269,7 +281,10 @@ export default function Page() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           candidate_name: candidateName.trim(),
+          original_role: originalRole.trim(),
+          original_tier: originalTier.trim(),
           job_requirements: requirements,
+          backend: 'gemini',
           ...usernamePayload,
         }),
       })
@@ -282,17 +297,23 @@ export default function Page() {
       const data: EvaluateResponse = await res.json()
       setResult(data)
 
-      /* draw radar after DOM update */
-      setTimeout(() => {
-        if (canvasRef.current) drawRadar(canvasRef.current, data.dimensions)
-      }, 80)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Unknown error')
     } finally {
       clearInterval(interval)
       setLoading(false)
     }
-  }, [candidateName, requirements, usernames])
+  }, [candidateName, requirements, usernames, originalRole, originalTier])
+
+  // Redraw radar chart whenever the tab changes or result updates
+  useEffect(() => {
+    if (result && !result.scoring_failed && canvasRef.current) {
+      // Small timeout to ensure canvas is fully rendered and styled before drawing
+      setTimeout(() => {
+        if (canvasRef.current) drawRadar(canvasRef.current, result.dimensions)
+      }, 10)
+    }
+  }, [result, view])
 
   // ── Stats Calculations for Dashboard ──
   const gh = result?.source_details?.github
@@ -358,6 +379,37 @@ export default function Page() {
     return { total, matched, percentage, list }
   })()
 
+  // ── Compute Overall Activity & Confidence ──
+  const isRecentPush = ghLatestPush ? new Date(ghLatestPush).getTime() > Date.now() - 90 * 24 * 60 * 60 * 1000 : false
+  const totalActivity = ghRepos + ghStars + pubCount + totalBlogs
+
+  let activityLevel = 'None'
+  let activityColor = 'var(--muted)'
+  if (totalActivity > 30 || ghStars > 50 || citations > 30 || (totalActivity > 10 && isRecentPush)) {
+    activityLevel = 'High'
+    activityColor = 'var(--green)'
+  } else if (totalActivity > 10 || citations > 5 || isRecentPush) {
+    activityLevel = 'Medium'
+    activityColor = 'var(--amber)'
+  } else if (totalActivity > 0 || ghFound) {
+    activityLevel = 'Low'
+    activityColor = 'var(--gold2)'
+  }
+
+  const profilesFound = [ghFound, liFound, acadFound, blogsFound].filter(Boolean).length
+  let confidenceLevel = 'Low'
+  let confidenceColor = 'var(--red)'
+  if (profilesFound >= 3 || (profilesFound >= 2 && kwStats.matched >= 3)) {
+    confidenceLevel = 'High'
+    confidenceColor = 'var(--green)'
+  } else if (profilesFound === 2 || (profilesFound === 1 && kwStats.matched >= 1)) {
+    confidenceLevel = 'Medium'
+    confidenceColor = 'var(--amber)'
+  } else if (profilesFound === 0) {
+    confidenceLevel = 'None'
+    confidenceColor = 'var(--muted)'
+  }
+
   /* ── Render ── */
   return (
     <div style={styles.page}>
@@ -378,677 +430,845 @@ export default function Page() {
               </div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <span className="badge badge-gold">9 dimensions</span>
-            <span className="badge badge-gold">Claude AI</span>
+          <div style={{ display: 'flex', gap: 20 }}>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={() => { setView('search'); }}
+                style={{
+                  background: view === 'search' && !result ? 'var(--navy4)' : 'transparent',
+                  border: 'none',
+                  color: view === 'search' && !result ? 'var(--gold2)' : 'var(--slate2)',
+                  padding: '8px 16px',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  fontSize: 12
+                }}
+              >
+                New Evaluation
+              </button>
+              <button
+                onClick={async () => {
+                  setView('talent_radar')
+                  try {
+                    const res = await fetch(`${API_URL}/candidates`)
+                    if (res.ok) setCandidates(await res.json())
+                  } catch (e) {
+                    console.error('Failed to fetch candidates', e)
+                  }
+                }}
+                style={{
+                  background: view === 'talent_radar' ? 'var(--navy4)' : 'transparent',
+                  border: 'none',
+                  color: view === 'talent_radar' ? 'var(--gold2)' : 'var(--slate2)',
+                  padding: '8px 16px',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  fontSize: 12
+                }}
+              >
+                Talent Radar
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span className="badge badge-gold">9 dimensions</span>
+              <span className="badge badge-gold">Gemini Flash</span>
+            </div>
           </div>
         </header>
 
         {/* Body */}
         <div style={styles.body} className="layout-split">
 
-          {/* ── Left panel ── */}
-          <div style={styles.panelLeft} className="panel-left">
+          {view === 'talent_radar' ? (
+            <div style={{ padding: '24px 40px', width: '100%', maxWidth: 1200, margin: '0 auto', overflowY: 'auto' }}>
+              <h2 style={{ fontSize: 24, fontWeight: 600, color: 'white', marginBottom: 8 }}>Talent Radar</h2>
+              <p style={{ color: 'var(--slate2)', fontSize: 13, marginBottom: 32 }}>All shortlisted candidates from past sessions, grouped by current status.</p>
 
-            <div className="section-label">Candidate</div>
-            <div style={{ marginBottom: 20 }}>
-              <label className="field-label">Full name</label>
-              <input
-                className="field-input"
-                placeholder="e.g. Andrew Ng"
-                value={candidateName}
-                onChange={e => setCandidateName(e.target.value)}
-              />
-            </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+                {['Active opportunity', 'Re-engage', 'Watch', 'Faded'].map(status => {
+                  const group = candidates.filter(c => c.status === status)
+                  if (group.length === 0) return null
 
-            {/* Optional source usernames — improves search accuracy over
-                guessing a username from the candidate's name */}
-            <div style={{ marginBottom: 20 }}>
-              <button
-                onClick={() => setShowUsernames(v => !v)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  padding: 0, fontSize: 11, color: 'var(--slate)',
-                  width: '100%', justifyContent: 'space-between',
-                }}
-                aria-expanded={showUsernames}
-              >
-                <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <i className="ti ti-at" aria-hidden style={{ fontSize: 12 }} />
-                  Username or Profile URL (optional)
-                </span>
-                <i className={`ti ${showUsernames ? 'ti-chevron-up' : 'ti-chevron-down'}`} aria-hidden style={{ fontSize: 13 }} />
-              </button>
-
-              {showUsernames && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-                  <p style={{ fontSize: 10.5, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 2 }}>
-                    Enter a username or paste a full profile URL — both work for all platforms,
-                    including Google Scholar (user ID or full URL) and ResearchGate (profile slug or full URL).
-                  </p>
-                  {USERNAME_FIELDS.map(f => (
-                    <div key={f.key}>
-                      <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <i className={`ti ${f.icon}`} aria-hidden style={{ fontSize: 11 }} />
-                        {f.label}
-                      </label>
-                      <input
-                        className="field-input"
-                        placeholder={f.placeholder}
-                        value={usernames[f.key]}
-                        onChange={e => handleUsernameChange(f.key, e.target.value, f.urlPattern)}
-                      />
-                      {fieldUrlHints[f.key] && (
-                        <div style={{ marginTop: 4, fontSize: 10.5, color: 'var(--green)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <i className="ti ti-circle-check" aria-hidden style={{ fontSize: 11 }} />
-                          URL detected — username extracted
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="section-label">Job requirements</div>
-
-            {/* Trending Suggestions */}
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 10.5, color: 'var(--slate)', marginBottom: 6 }}>Trending Requirements</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                {['Machine Learning', 'Python', 'React', 'AWS', 'Node.js', 'System Design'].map(skill => {
-                  const isSelected = requirements.includes(skill)
                   return (
-                    <button
-                      key={skill}
-                      onClick={() => {
-                        if (!isSelected) setRequirements(prev => [...prev, skill])
-                      }}
-                      style={{
-                        background: isSelected ? 'var(--gold-dim)' : 'var(--navy4)',
-                        border: `0.5px solid ${isSelected ? 'var(--gold)' : 'var(--border)'}`,
-                        color: isSelected ? 'var(--navy)' : 'var(--slate2)',
-                        padding: '3px 8px',
-                        borderRadius: 12,
-                        fontSize: 10,
-                        cursor: isSelected ? 'default' : 'pointer',
-                        transition: 'all 0.2s',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4
-                      }}
-                      disabled={isSelected}
-                    >
-                      {skill} <i className={`ti ${isSelected ? 'ti-check' : 'ti-plus'}`} style={{ fontSize: 9 }} />
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Requirement list */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
-              {requirements.map((r, i) => (
-                <div key={i} style={styles.reqItem}>
-                  <i className="ti ti-check" aria-hidden style={{ color: 'var(--gold)', fontSize: 13, flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, flex: 1 }}>{r}</span>
-                  <button
-                    onClick={() => removeReq(i)}
-                    style={styles.reqRemove}
-                    aria-label={`Remove ${r}`}
-                  >
-                    <i className="ti ti-x" aria-hidden style={{ fontSize: 12 }} />
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            {/* Add custom requirement */}
-            <div style={{ fontSize: 10.5, color: 'var(--slate)', marginBottom: 6, marginTop: 4 }}>Other Requirements</div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input
-                className="field-input"
-                style={{ flex: 1 }}
-                placeholder="Specify other requirements..."
-                value={reqInput}
-                onChange={e => setReqInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addReq()}
-              />
-              <button className="btn btn-ghost" onClick={addReq} aria-label="Add requirement" style={{ padding: '9px 12px' }}>
-                <i className="ti ti-plus" aria-hidden style={{ fontSize: 15 }} />
-              </button>
-            </div>
-
-            {/* Evaluate button */}
-            <button
-              className="btn btn-primary"
-              style={{ width: '100%', marginTop: 24 }}
-              onClick={runEval}
-              disabled={loading}
-            >
-              {loading
-                ? <><span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />Evaluating...</>
-                : <><i className="ti ti-sparkles" aria-hidden style={{ fontSize: 16 }} />Evaluate candidate</>
-              }
-            </button>
-
-            {/* Leaderboard hint */}
-            <a
-              href={`${API_URL}/candidates`}
-              target="_blank"
-              rel="noreferrer"
-              style={styles.leaderboardLink}
-            >
-              <i className="ti ti-trophy" aria-hidden style={{ fontSize: 13 }} />
-              View leaderboard
-            </a>
-          </div>
-
-          {/* ── Right panel ── */}
-          <div style={styles.panelRight}>
-
-            {/* Empty state */}
-            {!loading && !result && !error && (
-              <div style={styles.emptyState}>
-                <i className="ti ti-chart-radar" aria-hidden style={{ fontSize: 44, color: 'var(--gold-dim)' }} />
-                <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', maxWidth: 200, lineHeight: 1.7 }}>
-                  Enter a candidate name and job requirements, then run evaluation
-                </p>
-              </div>
-            )}
-
-            {/* Loading state */}
-            {loading && (
-              <div style={styles.emptyState}>
-                <div className="spinner" />
-                <p className="pulse" style={{ fontSize: 12, color: 'var(--slate)', letterSpacing: '0.04em' }}>
-                  {LOADING_STEPS[loadingStep]}
-                </p>
-              </div>
-            )}
-
-            {/* Error state */}
-            {error && (
-              <div style={styles.emptyState}>
-                <i className="ti ti-wifi-off" aria-hidden style={{ fontSize: 36, color: 'var(--red)' }} />
-                <p style={{ color: 'var(--red)', fontSize: 13, textAlign: 'center' }}>{error}</p>
-                <p style={{ color: 'var(--muted)', fontSize: 11, textAlign: 'center' }}>
-                  Make sure the backend is running on port 8000
-                </p>
-              </div>
-            )}
-
-            {/* Result */}
-            {result && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
-
-                {/* AI scoring warning banner */}
-                {result.scoring_failed && (
-                  <div style={{
-                    display: 'flex', alignItems: 'flex-start', gap: 10,
-                    padding: '10px 14px', borderRadius: 8,
-                    background: 'rgba(239,159,39,0.08)', border: '0.5px solid rgba(239,159,39,0.35)',
-                  }}>
-                    <i className="ti ti-alert-triangle" aria-hidden style={{ fontSize: 16, color: 'var(--amber)', marginTop: 1, flexShrink: 0 }} />
-                    <div>
-                      <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--amber)' }}>AI scoring unavailable</div>
-                      <div style={{ fontSize: 11, color: 'var(--slate)', marginTop: 2, lineHeight: 1.5 }}>
-                        Public profile data was collected and is shown below. Configure your AI API key to enable dimension scoring.
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Candidate header */}
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={styles.avatar}>{getInitials(result.candidate_name)}</div>
-                    <div>
-                      <div style={{ fontSize: 16, fontWeight: 500 }}>{result.candidate_name}</div>
-                      <div style={{ fontSize: 12, color: 'var(--slate)', marginTop: 2 }}>
-                        {result.scoring_failed
-                          ? `Public footprint search · ${requirements.length} requirements`
-                          : `Evaluated across ${Object.keys(result.dimensions).length} dimensions · ${requirements.length} requirements`
-                        }
-                      </div>
-                    </div>
-                  </div>
-                  {result.scoring_failed ? (
-                    <div style={{ ...styles.scorePill, borderColor: 'rgba(239,159,39,0.4)', background: 'rgba(239,159,39,0.06)' }}>
-                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--amber)', lineHeight: 1 }}>N/A</div>
-                      <div style={{ fontSize: 10, color: 'rgba(239,159,39,0.6)', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 2 }}>Score</div>
-                    </div>
-                  ) : (
-                    <div style={styles.scorePill}>
-                      <div style={{ fontSize: 28, fontWeight: 500, color: 'var(--gold2)', lineHeight: 1 }}>
-                        {Math.round(result.rescoring_score)}
-                      </div>
-                      <div style={{ fontSize: 10, color: 'var(--gold-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 2 }}>
-                        Overall
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Radar chart — only when AI scores are available */}
-                {!result.scoring_failed && (
-                  <div style={{ display: 'flex', justifyContent: 'center' }}>
-                    <canvas ref={canvasRef} width={280} height={280} aria-label="Radar chart of 9 dimension scores" />
-                  </div>
-                )}
-
-                {/* Dimension cards — only when AI scores are available */}
-                {!result.scoring_failed && (
-                  <div>
-                    <div className="section-label">Dimension scores</div>
-                    <div style={styles.dimGrid}>
-                      {DIMS.map(d => {
-                        const val = result.dimensions[d.key as keyof DimensionScores] ?? 0
-                        const cl = getColorClass(val, d.key === 'risk_indicators')
-                        const color = getScoreColor(val, d.key === 'risk_indicators')
-                        return (
-                          <div
-                            key={d.key}
-                            style={{
-                              ...styles.dimCard,
-                              ...(d.primary ? styles.dimCardPrimary : {}),
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
-                              <span style={{ fontSize: 11, color: 'var(--slate2)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                <i className={`ti ${d.icon}`} aria-hidden style={{ fontSize: 12 }} />
-                                {d.label}
-                                {d.subtracted && <span style={{ fontSize: 9, color: 'var(--muted)', marginLeft: 2 }}>(–)</span>}
-                              </span>
-                              <span style={{ fontSize: 13, fontWeight: 500, color }}>{val}</span>
-                            </div>
-                            <div className="bar-track">
-                              <div className={`bar-fill ${cl}`} style={{ width: `${val}%` }} />
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Source chips */}
-                <div>
-                  <div className="section-label">Public profiles found</div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {SOURCES.map(s => {
-                      const url = result.source_urls[s.key as keyof SourceURLs]
-                      const found = !!url
-                      return found ? (
-                        <a
-                          key={s.key}
-                          href={url!}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={styles.srcChipFound}
-                        >
-                          <i className={`ti ${s.icon}`} aria-hidden style={{ fontSize: 12 }} />
-                          {s.label}
-                        </a>
-                      ) : (
-                        <span key={s.key} style={styles.srcChipMiss}>
-                          <i className={`ti ${s.icon}`} aria-hidden style={{ fontSize: 12 }} />
-                          {s.label}
-                        </span>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                {/* ── Analytical Dashboard ── */}
-                <div style={{ marginTop: 8 }}>
-                  <div className="section-label">Public Footprint Analytics</div>
-                  <div style={styles.dbGrid}>
-
-                    {/* GitHub Card */}
-                    <div style={styles.dbCard}>
-                      <div style={styles.dbCardHeader}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <i className="ti ti-brand-github" style={{ fontSize: 18, color: 'var(--gold2)' }} />
-                          <span style={{ fontSize: 13, fontWeight: 600 }}>GitHub Activity</span>
-                        </div>
-                        {ghFound ? (
-                          <span className="badge badge-green" style={{ fontSize: 9, padding: '2px 6px' }}>Active</span>
-                        ) : (
-                          <span className="badge" style={{ fontSize: 9, padding: '2px 6px', background: 'var(--border2)', color: 'var(--muted)' }}>Not Found</span>
-                        )}
-                      </div>
-
-                      {ghFound ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10 }}>
-                          <div style={styles.dbStatRow}>
-                            <div style={styles.dbStatCol}>
-                              <span style={styles.dbStatVal}>{ghRepos}</span>
-                              <span style={styles.dbStatLabel}>Repos</span>
-                            </div>
-                            <div style={styles.dbStatCol}>
-                              <span style={styles.dbStatVal}>{ghStars}</span>
-                              <span style={styles.dbStatLabel}>Stars</span>
-                            </div>
-                            <div style={styles.dbStatCol}>
-                              <span style={styles.dbStatVal}>{ghFollowers}</span>
-                              <span style={styles.dbStatLabel}>Followers</span>
-                            </div>
-                          </div>
-
-                          {ghLanguages.length > 0 && (
-                            <div>
-                              <div style={styles.dbSubLabel}>Top Languages</div>
-                              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
-                                {ghLanguages.slice(0, 4).map((lang: string) => (
-                                  <span key={lang} style={styles.langBadge}>
-                                    {lang}
-                                  </span>
-                                ))}
+                    <div key={status}>
+                      <h3 style={{ fontSize: 15, fontWeight: 500, color: 'var(--gold2)', marginBottom: 12, borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>
+                        {status} <span style={{ color: 'var(--slate2)', fontSize: 12 }}>({group.length})</span>
+                      </h3>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+                        {group.map(c => (
+                          <div key={c.id} style={{ background: 'var(--navy3)', border: '1px solid var(--border)', borderRadius: 8, padding: 16 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                              <div>
+                                <div style={{ fontWeight: 600, color: 'white', fontSize: 15 }}>{c.name}</div>
+                                <div style={{ fontSize: 11, color: 'var(--slate2)', marginTop: 2 }}>{c.original_role || 'Unknown Role'}</div>
                               </div>
+                              {c.re_engage_flag && (
+                                <span style={{ background: 'rgba(46, 204, 113, 0.1)', color: 'var(--green)', padding: '2px 8px', borderRadius: 12, fontSize: 10, fontWeight: 600 }}>ACT NOW</span>
+                              )}
                             </div>
-                          )}
 
-                          {ghLatestPush && (
-                            <div style={{ fontSize: 11, color: 'var(--slate)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <i className="ti ti-history" style={{ fontSize: 12 }} />
-                              Latest Push: {ghLatestPush}
+                            <div style={{ fontSize: 12, color: 'var(--slate2)', background: 'var(--navy4)', padding: 10, borderRadius: 6, marginBottom: 12 }}>
+                              {c.whats_changed_summary || 'No recent updates available.'}
                             </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div style={styles.dbCardEmpty}>
-                          No public GitHub activity data was retrieved.
-                        </div>
-                      )}
-                    </div>
 
-                    {/* Career & Role Card (LinkedIn) */}
-                    <div style={styles.dbCard}>
-                      <div style={styles.dbCardHeader}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <i className="ti ti-briefcase" style={{ fontSize: 18, color: 'var(--gold2)' }} />
-                          <span style={{ fontSize: 13, fontWeight: 600 }}>LinkedIn Profile</span>
-                        </div>
-                        {liFound ? (
-                          <span className="badge badge-green" style={{ fontSize: 9, padding: '2px 6px' }}>Matched</span>
-                        ) : (
-                          <span className="badge" style={{ fontSize: 9, padding: '2px 6px', background: 'var(--border2)', color: 'var(--muted)' }}>Not Found</span>
-                        )}
-                      </div>
-
-                      {liFound ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
-                          <div>
-                            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
-                              {liRole ?? 'LinkedIn Profile Confirmed'}
-                            </div>
-                            {liCompany && (
-                              <div style={{ fontSize: 11.5, color: 'var(--gold2)', marginTop: 2 }}>
-                                @ {liCompany}
-                              </div>
-                            )}
-                          </div>
-
-                          {liSummary && (
-                            <p style={{ fontSize: 11, color: 'var(--slate2)', lineHeight: 1.5, fontStyle: 'italic' }}>
-                              "{liSummary.length > 140 ? liSummary.slice(0, 140) + '...' : liSummary}"
-                            </p>
-                          )}
-
-                          {li?.profile_url && (
-                            <a
-                              href={li.profile_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={{
-                                display: 'inline-flex', alignItems: 'center', gap: 4,
-                                fontSize: 11, color: 'var(--gold2)', textDecoration: 'none',
-                                marginTop: 4, fontWeight: 500,
-                              }}
-                            >
-                              View Profile <i className="ti ti-external-link" style={{ fontSize: 12 }} />
-                            </a>
-                          )}
-                        </div>
-                      ) : (
-                        <div style={styles.dbCardEmpty}>
-                          No public LinkedIn profile data matched.
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Academic Signal Card (Scholar + ResearchGate) */}
-                    <div style={styles.dbCard}>
-                      <div style={styles.dbCardHeader}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <i className="ti ti-school" style={{ fontSize: 18, color: 'var(--gold2)' }} />
-                          <span style={{ fontSize: 13, fontWeight: 600 }}>Academic Footprint</span>
-                        </div>
-                        {acadFound ? (
-                          <span className="badge badge-green" style={{ fontSize: 9, padding: '2px 6px' }}>Found</span>
-                        ) : (
-                          <span className="badge" style={{ fontSize: 9, padding: '2px 6px', background: 'var(--border2)', color: 'var(--muted)' }}>Not Found</span>
-                        )}
-                      </div>
-
-                      {acadFound ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
-                          <div style={styles.dbStatRow}>
-                            <div style={styles.dbStatCol}>
-                              <span style={styles.dbStatVal}>{citations}</span>
-                              <span style={styles.dbStatLabel}>Citations</span>
-                            </div>
-                            <div style={styles.dbStatCol}>
-                              <span style={styles.dbStatVal}>{pubCount}</span>
-                              <span style={styles.dbStatLabel}>Publications</span>
+                            <div style={{ display: 'flex', gap: 12, fontSize: 11 }}>
+                              <div style={{ color: 'var(--slate)' }}>Tier: <span style={{ color: 'white' }}>{c.original_tier || 'N/A'}</span></div>
+                              <div style={{ color: 'var(--slate)' }}>Fit: <span style={{ color: 'white', textTransform: 'capitalize' }}>{c.fit_direction || 'N/A'}</span></div>
                             </div>
                           </div>
-
-                          {interests.length > 0 && (
-                            <div>
-                              <div style={styles.dbSubLabel}>Research Focus</div>
-                              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
-                                {interests.slice(0, 3).map((item: string) => (
-                                  <span key={item} style={styles.interestBadge}>
-                                    {item}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {pubs.length > 0 && (
-                            <div style={{ marginTop: 6 }}>
-                              <div style={styles.dbSubLabel}>Top Publications</div>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-                                {pubs.slice(0, 3).map((pub: any, idx: number) => {
-                                  const targetUrl = pub.url || `https://scholar.google.com/scholar?q=${encodeURIComponent(pub.title || '')}`
-                                  return (
-                                  <a
-                                    key={idx}
-                                    href={targetUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    style={{
-                                      fontSize: 11,
-                                      color: 'var(--gold2)',
-                                      textDecoration: 'underline',
-                                      display: 'block',
-                                      whiteSpace: 'nowrap',
-                                      overflow: 'hidden',
-                                      textOverflow: 'ellipsis',
-                                      cursor: 'pointer'
-                                    }}
-                                  >
-                                    <i className="ti ti-file-text" style={{ marginRight: 4 }} />
-                                    {pub.title}
-                                  </a>
-                                )})}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div style={styles.dbCardEmpty}>
-                          No papers, citations or ResearchGate profile found.
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Blogging & Writing Card */}
-                    <div style={styles.dbCard}>
-                      <div style={styles.dbCardHeader}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <i className="ti ti-pencil" style={{ fontSize: 18, color: 'var(--gold2)' }} />
-                          <span style={{ fontSize: 13, fontWeight: 600 }}>Developer Community</span>
-                        </div>
-                        {blogsFound || result?.source_details?.kaggle?.profile_url ? (
-                          <span className="badge badge-green" style={{ fontSize: 9, padding: '2px 6px' }}>Active</span>
-                        ) : (
-                          <span className="badge" style={{ fontSize: 9, padding: '2px 6px', background: 'var(--border2)', color: 'var(--muted)' }}>Not Found</span>
-                        )}
-                      </div>
-
-                      {(blogsFound || result?.source_details?.kaggle?.profile_url) ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
-                          <div style={styles.dbStatRow}>
-                            <div style={styles.dbStatCol}>
-                              <span style={styles.dbStatVal}>{totalBlogs}</span>
-                              <span style={styles.dbStatLabel}>Blog Posts</span>
-                            </div>
-                            <div style={styles.dbStatCol}>
-                              <span style={{ ...styles.dbStatVal, fontSize: 13, color: result?.source_details?.kaggle?.profile_url ? 'var(--green)' : 'var(--muted)', marginTop: 6, display: 'inline-block' }}>
-                                {result?.source_details?.kaggle?.profile_url ? 'Found' : 'None'}
-                              </span>
-                              <span style={styles.dbStatLabel}>Kaggle profile</span>
-                            </div>
-                          </div>
-
-                          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 4 }}>
-                            {devtoCount > 0 && <span style={styles.blogPlatformBadge}>Dev.to ({devtoCount})</span>}
-                            {mediumCount > 0 && <span style={styles.blogPlatformBadge}>Medium ({mediumCount})</span>}
-                            {hashnodeCount > 0 && <span style={styles.blogPlatformBadge}>Hashnode ({hashnodeCount})</span>}
-                          </div>
-
-                          {allCommunityWorks.length > 0 && (
-                            <div style={{ marginTop: 6 }}>
-                              <div style={styles.dbSubLabel}>Featured Work & Articles</div>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-                                {allCommunityWorks.slice(0, 4).map((work: any, idx: number) => {
-                                  const targetUrl = work.url || `https://www.google.com/search?q=${encodeURIComponent(work.title || '')}`
-                                  return (
-                                  <a
-                                    key={idx}
-                                    href={targetUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    style={{
-                                      fontSize: 11,
-                                      color: 'var(--gold2)',
-                                      textDecoration: 'underline',
-                                      display: 'block',
-                                      whiteSpace: 'nowrap',
-                                      overflow: 'hidden',
-                                      textOverflow: 'ellipsis',
-                                      cursor: 'pointer'
-                                    }}
-                                  >
-                                    <i className="ti ti-link" style={{ marginRight: 4 }} />
-                                    {work.title}
-                                  </a>
-                                )})}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div style={styles.dbCardEmpty}>
-                          No active developer blogging or Kaggle profile found.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Keyword Alignment Banner */}
-                  {kwStats.total > 0 && (
-                    <div style={styles.kwAlignmentBox}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <i className="ti ti-target" style={{ fontSize: 16, color: 'var(--gold2)' }} />
-                          <span style={{ fontSize: 12.5, fontWeight: 500 }}>Job Description Keyword Relevance</span>
-                        </div>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--gold2)' }}>
-                          {kwStats.matched} / {kwStats.total} matched ({kwStats.percentage}%)
-                        </span>
-                      </div>
-
-                      <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 2, overflow: 'hidden', marginBottom: 12 }}>
-                        <div style={{ height: '100%', width: `${kwStats.percentage}%`, background: 'var(--gold2)', borderRadius: 2, transition: 'width 1s ease-out' }} />
-                      </div>
-
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {kwStats.list.map(kw => (
-                          <span
-                            key={kw.word}
-                            style={{
-                              ...styles.kwChip,
-                              ...(kw.hit ? styles.kwChipHit : styles.kwChipMiss)
-                            }}
-                          >
-                            <i className={`ti ${kw.hit ? 'ti-circle-check' : 'ti-circle-x'}`} aria-hidden style={{ fontSize: 11 }} />
-                            {kw.word}
-                          </span>
                         ))}
                       </div>
                     </div>
+                  )
+                })}
+                {candidates.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--slate2)' }}>
+                    No candidates evaluated yet. Run an evaluation to see them here!
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* ── Left panel ── */}
+              <div style={styles.panelLeft} className="panel-left">
+
+                <div className="section-label">Candidate</div>
+                <div style={{ marginBottom: 20 }}>
+                  <label className="field-label">Full name</label>
+                  <input
+                    className="field-input"
+                    placeholder="e.g. Andrew Ng"
+                    value={candidateName}
+                    onChange={e => setCandidateName(e.target.value)}
+                  />
+                </div>
+
+                {/* Optional source usernames — improves search accuracy over
+                guessing a username from the candidate's name */}
+                <div style={{ marginBottom: 20 }}>
+                  <button
+                    onClick={() => setShowUsernames(v => !v)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      padding: 0, fontSize: 11, color: 'var(--slate)',
+                      width: '100%', justifyContent: 'space-between',
+                    }}
+                    aria-expanded={showUsernames}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <i className="ti ti-at" aria-hidden style={{ fontSize: 12 }} />
+                      Username or Profile URL (optional)
+                    </span>
+                    <i className={`ti ${showUsernames ? 'ti-chevron-up' : 'ti-chevron-down'}`} aria-hidden style={{ fontSize: 13 }} />
+                  </button>
+
+                  {showUsernames && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+                      <p style={{ fontSize: 10.5, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 2 }}>
+                        Enter a username or paste a full profile URL — both work for all platforms,
+                        including Google Scholar (user ID or full URL) and ResearchGate (profile slug or full URL).
+                      </p>
+                      {USERNAME_FIELDS.map(f => (
+                        <div key={f.key}>
+                          <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <i className={`ti ${f.icon}`} aria-hidden style={{ fontSize: 11 }} />
+                            {f.label}
+                          </label>
+                          <input
+                            className="field-input"
+                            placeholder={f.placeholder}
+                            value={usernames[f.key]}
+                            onChange={e => handleUsernameChange(f.key, e.target.value, f.urlPattern)}
+                          />
+                          {fieldUrlHints[f.key] && (
+                            <div style={{ marginTop: 4, fontSize: 10.5, color: 'var(--green)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <i className="ti ti-circle-check" aria-hidden style={{ fontSize: 11 }} />
+                              URL detected — username extracted
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
 
-                {/* AI reasoning */}
-                <div>
-                  <div className="section-label">AI reasoning</div>
-                  <div style={styles.reasonBox}>
-                    {DIMS.map(d => {
-                      const text = result.reasoning[d.key]
-                      if (!text) return null
+                <div style={{ marginBottom: 20 }}>
+                  <label className="field-label">Original Role Applied For</label>
+                  <input
+                    className="field-input"
+                    placeholder="e.g. Senior Backend Engineer"
+                    value={originalRole}
+                    onChange={e => setOriginalRole(e.target.value)}
+                  />
+                </div>
+
+                <div style={{ marginBottom: 20 }}>
+                  <label className="field-label">Original HINT Tier</label>
+                  <input
+                    className="field-input"
+                    placeholder="e.g. Tier 1"
+                    value={originalTier}
+                    onChange={e => setOriginalTier(e.target.value)}
+                  />
+                </div>
+
+                <div className="section-label">Job requirements</div>
+
+                {/* Trending Suggestions */}
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 10.5, color: 'var(--slate)', marginBottom: 6 }}>Trending Requirements</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                    {['Machine Learning', 'Python', 'React', 'AWS', 'Node.js', 'System Design'].map(skill => {
+                      const isSelected = requirements.includes(skill)
                       return (
-                        <div key={d.key} style={styles.reasonItem}>
-                          <span style={{ color: 'var(--gold2)', fontSize: 11, fontWeight: 500 }}>{d.label}: </span>
-                          {text}
-                        </div>
+                        <button
+                          key={skill}
+                          onClick={() => {
+                            if (!isSelected) setRequirements(prev => [...prev, skill])
+                          }}
+                          style={{
+                            background: isSelected ? 'var(--gold-dim)' : 'var(--navy4)',
+                            border: `0.5px solid ${isSelected ? 'var(--gold)' : 'var(--border)'}`,
+                            color: isSelected ? 'var(--navy)' : 'var(--slate2)',
+                            padding: '3px 8px',
+                            borderRadius: 12,
+                            fontSize: 10,
+                            cursor: isSelected ? 'default' : 'pointer',
+                            transition: 'all 0.2s',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4
+                          }}
+                          disabled={isSelected}
+                        >
+                          {skill} <i className={`ti ${isSelected ? 'ti-check' : 'ti-plus'}`} style={{ fontSize: 9 }} />
+                        </button>
                       )
                     })}
                   </div>
                 </div>
 
-                {/* ── AI Summary (placeholder — backend TBD) ── */}
-                <div>
-                  <div className="section-label">AI Summary</div>
-                  <div style={styles.aiSummaryBox}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                      <div style={styles.aiSummaryIcon}>
-                        <i className="ti ti-robot" aria-hidden style={{ fontSize: 18, color: 'var(--gold2)' }} />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>AI-generated Candidate Summary</div>
-                        <div style={{ fontSize: 11, color: 'var(--slate)', marginTop: 1 }}>Powered by your chosen AI model</div>
-                      </div>
-                      <span className="badge" style={{ marginLeft: 'auto', fontSize: 9, padding: '2px 8px', background: 'rgba(201,168,76,0.08)', border: '0.5px solid var(--gold-dim)', color: 'var(--gold-dim)' }}>Coming soon</span>
+                {/* Requirement list */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                  {requirements.map((r, i) => (
+                    <div key={i} style={styles.reqItem}>
+                      <i className="ti ti-check" aria-hidden style={{ color: 'var(--gold)', fontSize: 13, flexShrink: 0 }} />
+                      <span style={{ fontSize: 12, flex: 1 }}>{r}</span>
+                      <button
+                        onClick={() => removeReq(i)}
+                        style={styles.reqRemove}
+                        aria-label={`Remove ${r}`}
+                      >
+                        <i className="ti ti-x" aria-hidden style={{ fontSize: 12 }} />
+                      </button>
                     </div>
-                    <div style={styles.aiSummaryPlaceholder}>
-                      <i className="ti ti-sparkles" aria-hidden style={{ fontSize: 28, color: 'var(--gold-dim)', marginBottom: 8 }} />
-                      <p style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center', lineHeight: 1.7, maxWidth: 280 }}>
-                        A concise natural-language summary of this candidate's public footprint will appear here once an AI model is configured.
-                      </p>
-                    </div>
-                  </div>
+                  ))}
                 </div>
 
+                {/* Add custom requirement */}
+                <div style={{ fontSize: 10.5, color: 'var(--slate)', marginBottom: 6, marginTop: 4 }}>Other Requirements</div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    className="field-input"
+                    style={{ flex: 1 }}
+                    placeholder="Specify other requirements..."
+                    value={reqInput}
+                    onChange={e => setReqInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && addReq()}
+                  />
+                  <button className="btn btn-ghost" onClick={addReq} aria-label="Add requirement" style={{ padding: '9px 12px' }}>
+                    <i className="ti ti-plus" aria-hidden style={{ fontSize: 15 }} />
+                  </button>
+                </div>
+
+                {/* Evaluate button */}
+                <button
+                  className="btn btn-primary"
+                  style={{ width: '100%', marginTop: 24 }}
+                  onClick={runEval}
+                  disabled={loading}
+                >
+                  {loading
+                    ? <><span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />Evaluating...</>
+                    : <><i className="ti ti-sparkles" aria-hidden style={{ fontSize: 16 }} />Evaluate candidate</>
+                  }
+                </button>
+
+                {/* Leaderboard hint */}
+                <a
+                  href={`${API_URL}/candidates`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={styles.leaderboardLink}
+                >
+                  <i className="ti ti-trophy" aria-hidden style={{ fontSize: 13 }} />
+                  View leaderboard
+                </a>
               </div>
-            )}
-          </div>
+
+              {/* ── Right panel ── */}
+              <div style={styles.panelRight}>
+
+                {/* Empty state */}
+                {!loading && !result && !error && (
+                  <div style={styles.emptyState}>
+                    <i className="ti ti-chart-radar" aria-hidden style={{ fontSize: 44, color: 'var(--gold-dim)' }} />
+                    <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', maxWidth: 200, lineHeight: 1.7 }}>
+                      Enter a candidate name and job requirements, then run evaluation
+                    </p>
+                  </div>
+                )}
+
+                {/* Loading state */}
+                {loading && (
+                  <div style={styles.emptyState}>
+                    <div className="spinner" />
+                    <p className="pulse" style={{ fontSize: 12, color: 'var(--slate)', letterSpacing: '0.04em' }}>
+                      {LOADING_STEPS[loadingStep]}
+                    </p>
+                  </div>
+                )}
+
+                {/* Error state */}
+                {error && (
+                  <div style={styles.emptyState}>
+                    <i className="ti ti-wifi-off" aria-hidden style={{ fontSize: 36, color: 'var(--red)' }} />
+                    <p style={{ color: 'var(--red)', fontSize: 13, textAlign: 'center' }}>{error}</p>
+                    <p style={{ color: 'var(--muted)', fontSize: 11, textAlign: 'center' }}>
+                      Make sure the backend is running on port 8000
+                    </p>
+                  </div>
+                )}
+
+                {/* Result */}
+                {result && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
+
+                    {/* AI scoring warning banner */}
+                    {result.scoring_failed && (
+                      <div style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 10,
+                        padding: '10px 14px', borderRadius: 8,
+                        background: 'rgba(239,159,39,0.08)', border: '0.5px solid rgba(239,159,39,0.35)',
+                      }}>
+                        <i className="ti ti-alert-triangle" aria-hidden style={{ fontSize: 16, color: 'var(--amber)', marginTop: 1, flexShrink: 0 }} />
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--amber)' }}>AI scoring unavailable</div>
+                          <div style={{ fontSize: 11, color: 'var(--slate)', marginTop: 2, lineHeight: 1.5 }}>
+                            Public profile data was collected and is shown below. Configure your AI API key to enable dimension scoring.
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Candidate header */}
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={styles.avatar}>{getInitials(result.candidate_name)}</div>
+                        <div>
+                          <div style={{ fontSize: 16, fontWeight: 500 }}>{result.candidate_name}</div>
+                          <div style={{ fontSize: 12, color: 'var(--slate)', marginTop: 2 }}>
+                            {result.scoring_failed
+                              ? `Public footprint search · ${requirements.length} requirements`
+                              : `Evaluated across ${Object.keys(result.dimensions).length} dimensions · ${requirements.length} requirements`
+                            }
+                          </div>
+                        </div>
+                      </div>
+                      {result.scoring_failed ? (
+                        <div style={{ ...styles.scorePill, borderColor: 'rgba(239,159,39,0.4)', background: 'rgba(239,159,39,0.06)' }}>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--amber)', lineHeight: 1 }}>N/A</div>
+                          <div style={{ fontSize: 10, color: 'rgba(239,159,39,0.6)', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 2 }}>Score</div>
+                        </div>
+                      ) : (
+                        <div style={styles.scorePill}>
+                          <div style={{ fontSize: 28, fontWeight: 500, color: 'var(--gold2)', lineHeight: 1 }}>
+                            {Math.round(result.rescoring_score)}
+                          </div>
+                          <div style={{ fontSize: 10, color: 'var(--gold-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 2 }}>
+                            Overall
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Radar chart — only when AI scores are available */}
+                    {!result.scoring_failed && (
+                      <div style={{ display: 'flex', justifyContent: 'center' }}>
+                        <canvas ref={canvasRef} width={280} height={280} aria-label="Radar chart of 9 dimension scores" />
+                      </div>
+                    )}
+
+                    {/* Dimension cards — only when AI scores are available */}
+                    {!result.scoring_failed && (
+                      <div>
+                        <div className="section-label">Dimension scores</div>
+                        <div style={styles.dimGrid}>
+                          {DIMS.map(d => {
+                            const val = result.dimensions[d.key as keyof DimensionScores] ?? 0
+                            const cl = getColorClass(val, d.key === 'risk_indicators')
+                            const color = getScoreColor(val, d.key === 'risk_indicators')
+                            return (
+                              <div
+                                key={d.key}
+                                style={{
+                                  ...styles.dimCard,
+                                  ...(d.primary ? styles.dimCardPrimary : {}),
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
+                                  <span style={{ fontSize: 11, color: 'var(--slate2)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <i className={`ti ${d.icon}`} aria-hidden style={{ fontSize: 12 }} />
+                                    {d.label}
+                                    {d.subtracted && <span style={{ fontSize: 9, color: 'var(--muted)', marginLeft: 2 }}>(–)</span>}
+                                  </span>
+                                  <span style={{ fontSize: 13, fontWeight: 500, color }}>{val}</span>
+                                </div>
+                                <div className="bar-track">
+                                  <div className={`bar-fill ${cl}`} style={{ width: `${val}%` }} />
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Source chips */}
+                    <div>
+                      <div className="section-label">Public profiles found</div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {SOURCES.map(s => {
+                          const url = result.source_urls[s.key as keyof SourceURLs]
+                          const found = !!url
+                          return found ? (
+                            <a
+                              key={s.key}
+                              href={url!}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={styles.srcChipFound}
+                            >
+                              <i className={`ti ${s.icon}`} aria-hidden style={{ fontSize: 12 }} />
+                              {s.label}
+                            </a>
+                          ) : (
+                            <span key={s.key} style={styles.srcChipMiss}>
+                              <i className={`ti ${s.icon}`} aria-hidden style={{ fontSize: 12 }} />
+                              {s.label}
+                            </span>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* ── Analytical Dashboard ── */}
+                    <div style={{ marginTop: 8 }}>
+                      <div className="section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                        <span>PUBLIC FOOTPRINT ANALYTICS</span>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          {result.fit_direction && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.03)', padding: '4px 10px', borderRadius: 20, border: '0.5px solid var(--border)' }}>
+                              <span style={{ fontSize: 10, color: 'var(--slate2)', textTransform: 'none', letterSpacing: 'normal' }}>Fit:</span>
+                              <span style={{ fontSize: 11, fontWeight: 600, color: 'white', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{result.fit_direction}</span>
+                            </div>
+                          )}
+                          {result.status && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.03)', padding: '4px 10px', borderRadius: 20, border: '0.5px solid var(--border)' }}>
+                              <span style={{ fontSize: 10, color: 'var(--slate2)', textTransform: 'none', letterSpacing: 'normal' }}>Status:</span>
+                              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--gold2)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{result.status}</span>
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.03)', padding: '4px 10px', borderRadius: 20, border: '0.5px solid var(--border)' }}>
+                            <span style={{ fontSize: 10, color: 'var(--slate2)', textTransform: 'none', letterSpacing: 'normal' }}>Activity:</span>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: activityColor, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{activityLevel}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.03)', padding: '4px 10px', borderRadius: 20, border: '0.5px solid var(--border)' }}>
+                            <span style={{ fontSize: 10, color: 'var(--slate2)', textTransform: 'none', letterSpacing: 'normal' }}>Confidence:</span>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: confidenceColor, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{confidenceLevel}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {result.whats_changed_summary && (
+                        <div style={{ marginBottom: 20 }}>
+                          <div style={styles.aiSummaryBox}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                              <div style={styles.aiSummaryIcon}>
+                                <i className="ti ti-sparkles" aria-hidden style={{ fontSize: 18, color: 'var(--gold2)' }} />
+                              </div>
+                              <div>
+                                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>AI-generated Update Summary</div>
+                                <div style={{ fontSize: 11, color: 'var(--slate)', marginTop: 1 }}>Powered by Gemini 1.5</div>
+                              </div>
+                            </div>
+                            <div style={{ fontSize: 13, color: 'var(--slate2)', lineHeight: 1.6, padding: '8px 12px', background: 'rgba(255,255,255,0.02)', borderRadius: 8 }}>
+                              {result.whats_changed_summary}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div style={styles.dbGrid}>
+
+                        {/* GitHub Card */}
+                        <div style={styles.dbCard}>
+                          <div style={styles.dbCardHeader}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <i className="ti ti-brand-github" style={{ fontSize: 18, color: 'var(--gold2)' }} />
+                              <span style={{ fontSize: 13, fontWeight: 600 }}>GitHub Activity</span>
+                            </div>
+                            {ghFound ? (
+                              <span className="badge badge-green" style={{ fontSize: 9, padding: '2px 6px' }}>Active</span>
+                            ) : (
+                              <span className="badge" style={{ fontSize: 9, padding: '2px 6px', background: 'var(--border2)', color: 'var(--muted)' }}>Not Found</span>
+                            )}
+                          </div>
+
+                          {ghFound ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10 }}>
+                              <div style={styles.dbStatRow}>
+                                <div style={styles.dbStatCol}>
+                                  <span style={styles.dbStatVal}>{ghRepos}</span>
+                                  <span style={styles.dbStatLabel}>Repos</span>
+                                </div>
+                                <div style={styles.dbStatCol}>
+                                  <span style={styles.dbStatVal}>{ghStars}</span>
+                                  <span style={styles.dbStatLabel}>Stars</span>
+                                </div>
+                                <div style={styles.dbStatCol}>
+                                  <span style={styles.dbStatVal}>{ghFollowers}</span>
+                                  <span style={styles.dbStatLabel}>Followers</span>
+                                </div>
+                              </div>
+
+                              {ghLanguages.length > 0 && (
+                                <div>
+                                  <div style={styles.dbSubLabel}>Top Languages</div>
+                                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                                    {ghLanguages.slice(0, 4).map((lang: string) => (
+                                      <span key={lang} style={styles.langBadge}>
+                                        {lang}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {ghLatestPush && (
+                                <div style={{ fontSize: 11, color: 'var(--slate)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <i className="ti ti-history" style={{ fontSize: 12 }} />
+                                  Latest Push: {ghLatestPush}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div style={styles.dbCardEmpty}>
+                              No public GitHub activity data was retrieved.
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Career & Role Card (LinkedIn) */}
+                        <div style={styles.dbCard}>
+                          <div style={styles.dbCardHeader}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <i className="ti ti-briefcase" style={{ fontSize: 18, color: 'var(--gold2)' }} />
+                              <span style={{ fontSize: 13, fontWeight: 600 }}>LinkedIn Profile</span>
+                            </div>
+                            {liFound ? (
+                              <span className="badge badge-green" style={{ fontSize: 9, padding: '2px 6px' }}>Matched</span>
+                            ) : (
+                              <span className="badge" style={{ fontSize: 9, padding: '2px 6px', background: 'var(--border2)', color: 'var(--muted)' }}>Not Found</span>
+                            )}
+                          </div>
+
+                          {liFound ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+                              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
+                                LinkedIn Profile Confirmed
+                              </div>
+
+                              {liSummary && (
+                                <p style={{ fontSize: 11, color: 'var(--slate2)', lineHeight: 1.5, fontStyle: 'italic' }}>
+                                  "{liSummary.length > 140 ? liSummary.slice(0, 140) + '...' : liSummary}"
+                                </p>
+                              )}
+
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, background: 'linear-gradient(135deg, rgba(46, 204, 113, 0.15), rgba(46, 204, 113, 0.05))', padding: '12px 14px', borderRadius: 8, border: '1px solid rgba(46, 204, 113, 0.3)', marginTop: 4, marginBottom: 12 }}>
+                                <div style={{ fontSize: 12, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <i className="ti ti-briefcase" style={{ color: 'var(--green)', fontSize: 14 }} />
+                                  <span style={{ color: 'var(--slate2)', fontWeight: 500, width: 130 }}>Employment Status:</span>
+                                  <span style={{ fontWeight: 600, color: liRole ? '#00F0FF' : 'var(--muted)', letterSpacing: '0.02em' }}>{liRole || 'Not specified'}</span>
+                                </div>
+                                <div style={{ fontSize: 12, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <i className="ti ti-building" style={{ color: 'var(--green)', fontSize: 14 }} />
+                                  <span style={{ color: 'var(--slate2)', fontWeight: 500, width: 130 }}>Current Company:</span>
+                                  <span style={{ fontWeight: 600, color: liCompany ? '#00F0FF' : 'var(--muted)', letterSpacing: '0.02em' }}>{liCompany || 'Not specified'}</span>
+                                </div>
+                              </div>
+
+                              {li?.profile_url && (
+                                <a
+                                  href={li.profile_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                                    fontSize: 11, color: 'var(--gold2)', textDecoration: 'none',
+                                    marginTop: 4, fontWeight: 500,
+                                  }}
+                                >
+                                  View Profile <i className="ti ti-external-link" style={{ fontSize: 12 }} />
+                                </a>
+                              )}
+                            </div>
+                          ) : (
+                            <div style={styles.dbCardEmpty}>
+                              No public LinkedIn profile data matched.
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Academic Signal Card (Scholar + ResearchGate) */}
+                        <div style={styles.dbCard}>
+                          <div style={styles.dbCardHeader}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <i className="ti ti-school" style={{ fontSize: 18, color: 'var(--gold2)' }} />
+                              <span style={{ fontSize: 13, fontWeight: 600 }}>Academic Footprint</span>
+                            </div>
+                            {acadFound ? (
+                              <span className="badge badge-green" style={{ fontSize: 9, padding: '2px 6px' }}>Found</span>
+                            ) : (
+                              <span className="badge" style={{ fontSize: 9, padding: '2px 6px', background: 'var(--border2)', color: 'var(--muted)' }}>Not Found</span>
+                            )}
+                          </div>
+
+                          {acadFound ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+                              <div style={styles.dbStatRow}>
+                                <div style={styles.dbStatCol}>
+                                  <span style={styles.dbStatVal}>{citations}</span>
+                                  <span style={styles.dbStatLabel}>Citations</span>
+                                </div>
+                                <div style={styles.dbStatCol}>
+                                  <span style={styles.dbStatVal}>{pubCount}</span>
+                                  <span style={styles.dbStatLabel}>Publications</span>
+                                </div>
+                              </div>
+
+                              {interests.length > 0 && (
+                                <div>
+                                  <div style={styles.dbSubLabel}>Research Focus</div>
+                                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                                    {interests.slice(0, 3).map((item: string) => (
+                                      <span key={item} style={styles.interestBadge}>
+                                        {item}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {pubs.length > 0 && (
+                                <div style={{ marginTop: 6 }}>
+                                  <div style={styles.dbSubLabel}>Top Publications</div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                                    {pubs.slice(0, 3).map((pub: any, idx: number) => {
+                                      const targetUrl = pub.url || `https://scholar.google.com/scholar?q=${encodeURIComponent(pub.title || '')}`
+                                      return (
+                                        <a
+                                          key={idx}
+                                          href={targetUrl}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          style={{
+                                            fontSize: 11,
+                                            color: 'var(--gold2)',
+                                            textDecoration: 'underline',
+                                            display: 'block',
+                                            whiteSpace: 'nowrap',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            cursor: 'pointer'
+                                          }}
+                                        >
+                                          <i className="ti ti-file-text" style={{ marginRight: 4 }} />
+                                          {pub.title}
+                                        </a>
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div style={styles.dbCardEmpty}>
+                              No papers, citations or ResearchGate profile found.
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Blogging & Writing Card */}
+                        <div style={styles.dbCard}>
+                          <div style={styles.dbCardHeader}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <i className="ti ti-pencil" style={{ fontSize: 18, color: 'var(--gold2)' }} />
+                              <span style={{ fontSize: 13, fontWeight: 600 }}>Developer Community</span>
+                            </div>
+                            {blogsFound || result?.source_details?.kaggle?.profile_url ? (
+                              <span className="badge badge-green" style={{ fontSize: 9, padding: '2px 6px' }}>Active</span>
+                            ) : (
+                              <span className="badge" style={{ fontSize: 9, padding: '2px 6px', background: 'var(--border2)', color: 'var(--muted)' }}>Not Found</span>
+                            )}
+                          </div>
+
+                          {(blogsFound || result?.source_details?.kaggle?.profile_url) ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+                              <div style={styles.dbStatRow}>
+                                <div style={styles.dbStatCol}>
+                                  <span style={styles.dbStatVal}>{totalBlogs}</span>
+                                  <span style={styles.dbStatLabel}>Blog Posts</span>
+                                </div>
+                                <div style={styles.dbStatCol}>
+                                  <span style={{ ...styles.dbStatVal, fontSize: 13, color: result?.source_details?.kaggle?.profile_url ? 'var(--green)' : 'var(--muted)', marginTop: 6, display: 'inline-block' }}>
+                                    {result?.source_details?.kaggle?.profile_url ? 'Found' : 'None'}
+                                  </span>
+                                  <span style={styles.dbStatLabel}>Kaggle profile</span>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 4 }}>
+                                {devtoCount > 0 && <span style={styles.blogPlatformBadge}>Dev.to ({devtoCount})</span>}
+                                {mediumCount > 0 && <span style={styles.blogPlatformBadge}>Medium ({mediumCount})</span>}
+                                {hashnodeCount > 0 && <span style={styles.blogPlatformBadge}>Hashnode ({hashnodeCount})</span>}
+                              </div>
+
+                              {allCommunityWorks.length > 0 && (
+                                <div style={{ marginTop: 6 }}>
+                                  <div style={styles.dbSubLabel}>Featured Work & Articles</div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                                    {allCommunityWorks.slice(0, 4).map((work: any, idx: number) => {
+                                      const targetUrl = work.url || `https://www.google.com/search?q=${encodeURIComponent(work.title || '')}`
+                                      return (
+                                        <a
+                                          key={idx}
+                                          href={targetUrl}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          style={{
+                                            fontSize: 11,
+                                            color: 'var(--gold2)',
+                                            textDecoration: 'underline',
+                                            display: 'block',
+                                            whiteSpace: 'nowrap',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            cursor: 'pointer'
+                                          }}
+                                        >
+                                          <i className="ti ti-link" style={{ marginRight: 4 }} />
+                                          {work.title}
+                                        </a>
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div style={styles.dbCardEmpty}>
+                              No active developer blogging or Kaggle profile found.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Keyword Alignment Banner */}
+                      {kwStats.total > 0 && (
+                        <div style={styles.kwAlignmentBox}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <i className="ti ti-target" style={{ fontSize: 16, color: 'var(--gold2)' }} />
+                              <span style={{ fontSize: 12.5, fontWeight: 500 }}>Job Description Keyword Relevance</span>
+                            </div>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--gold2)' }}>
+                              {kwStats.matched} / {kwStats.total} matched ({kwStats.percentage}%)
+                            </span>
+                          </div>
+
+                          <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 2, overflow: 'hidden', marginBottom: 12 }}>
+                            <div style={{ height: '100%', width: `${kwStats.percentage}%`, background: 'var(--gold2)', borderRadius: 2, transition: 'width 1s ease-out' }} />
+                          </div>
+
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            {kwStats.list.map(kw => (
+                              <span
+                                key={kw.word}
+                                style={{
+                                  ...styles.kwChip,
+                                  ...(kw.hit ? styles.kwChipHit : styles.kwChipMiss)
+                                }}
+                              >
+                                <i className={`ti ${kw.hit ? 'ti-circle-check' : 'ti-circle-x'}`} aria-hidden style={{ fontSize: 11 }} />
+                                {kw.word}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* AI reasoning */}
+                    {result.reasoning && (
+                      <div>
+                        <div className="section-label">AI reasoning</div>
+                        <div style={styles.reasonBox}>
+                          {DIMS.map(d => {
+                            const text = result.reasoning[d.key]
+                            if (!text) return null
+                            return (
+                              <div key={d.key} style={styles.reasonItem}>
+                                <span style={{ color: 'var(--gold2)', fontSize: 11, fontWeight: 500 }}>{d.label}: </span>
+                                {text}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── AI Summary (placeholder — backend TBD) ── */}
+                    <div>
+                      <div className="section-label">AI Summary</div>
+                      <div style={styles.aiSummaryBox}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                          <div style={styles.aiSummaryIcon}>
+                            <i className="ti ti-robot" aria-hidden style={{ fontSize: 18, color: 'var(--gold2)' }} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>AI-generated Candidate Summary</div>
+                            <div style={{ fontSize: 11, color: 'var(--slate)', marginTop: 1 }}>Powered by your chosen AI model</div>
+                          </div>
+                          <span className="badge" style={{ marginLeft: 'auto', fontSize: 9, padding: '2px 8px', background: 'rgba(201,168,76,0.08)', border: '0.5px solid var(--gold-dim)', color: 'var(--gold-dim)' }}>Coming soon</span>
+                        </div>
+                        <div style={styles.aiSummaryPlaceholder}>
+                          <i className="ti ti-sparkles" aria-hidden style={{ fontSize: 28, color: 'var(--gold-dim)', marginBottom: 8 }} />
+                          <p style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center', lineHeight: 1.7, maxWidth: 280 }}>
+                            A concise natural-language summary of this candidate's public footprint will appear here once an AI model is configured.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -53,6 +53,12 @@ def init_db():
             CREATE TABLE IF NOT EXISTS candidates (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
                 name           TEXT    NOT NULL,
+                original_role  TEXT,
+                original_tier  TEXT,
+                fit_direction  TEXT,
+                whats_changed_summary TEXT,
+                re_engage_flag BOOLEAN,
+                status         TEXT,
                 {username_cols_sql},
                 {dim_cols_sql},
                 created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -61,18 +67,18 @@ def init_db():
         conn.commit()
 
 
-def insert_candidate(name: str, dimensions: dict, usernames: dict | None = None) -> int:
+def insert_candidate(name: str, dimensions: dict, usernames: dict | None = None,
+                     original_role: str = "", original_tier: str = "",
+                     fit_direction: str = "", whats_changed_summary: str = "",
+                     re_engage_flag: bool = False, status: str = "") -> int:
     """
     Insert a candidate and return the new row id.
-
-    dimensions: dict with the 9 dimension keys (see DIMENSION_COLUMNS), 0-100 each.
-    usernames:  optional dict with any of the USERNAME_COLUMNS keys.
     """
     usernames = usernames or {}
 
-    columns = ["name"] + USERNAME_COLUMNS + DIMENSION_COLUMNS
+    columns = ["name", "original_role", "original_tier", "fit_direction", "whats_changed_summary", "re_engage_flag", "status"] + USERNAME_COLUMNS + DIMENSION_COLUMNS
     values = (
-        [name]
+        [name, original_role, original_tier, fit_direction, whats_changed_summary, re_engage_flag, status]
         + [usernames.get(col) for col in USERNAME_COLUMNS]
         + [dimensions.get(col, 0) for col in DIMENSION_COLUMNS]
     )

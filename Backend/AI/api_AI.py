@@ -23,6 +23,7 @@ import os
 import requests
 import time
 import re
+from pydantic import BaseModel, Field
 
 # Ensure Windows terminal encoding errors never crash print statements
 if hasattr(sys.stdout, "reconfigure"):
@@ -35,6 +36,9 @@ if hasattr(sys.stdout, "reconfigure"):
 from dotenv import load_dotenv
 
 load_dotenv()
+
+from google import genai
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # ── Import siblings ──────────────────────────────────────
 _BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -60,7 +64,6 @@ DIMENSION_KEYS = [
 ]
 
 # ── Dimension weights ────────────────────────────────────
-# Role domain relevance is the primary differentiator
 WEIGHTS = {
     "technical_competency":   0.15,
     "problem_solving":        0.10,
@@ -73,48 +76,46 @@ WEIGHTS = {
     "role_domain_relevance":  0.30,   # primary signal
 }
 
+# ── Pydantic Schemas for Gemini ───────────────────────────────────────
+class Reasoning(BaseModel):
+    technical_competency: str = Field(description="One sentence reasoning")
+    problem_solving: str = Field(description="One sentence reasoning")
+    communication: str = Field(description="One sentence reasoning")
+    career_stability: str = Field(description="One sentence reasoning")
+    company_exposure: str = Field(description="One sentence reasoning")
+    academic_signal: str = Field(description="One sentence reasoning")
+    initiative: str = Field(description="One sentence reasoning")
+    risk_indicators: str = Field(description="One sentence reasoning")
+    role_domain_relevance: str = Field(description="One sentence reasoning")
+
+class CandidateEvaluation(BaseModel):
+    technical_competency: int = Field(description="Score 0-100")
+    problem_solving: int = Field(description="Score 0-100")
+    communication: int = Field(description="Score 0-100")
+    career_stability: int = Field(description="Score 0-100")
+    company_exposure: int = Field(description="Score 0-100")
+    academic_signal: int = Field(description="Score 0-100")
+    initiative: int = Field(description="Score 0-100")
+    risk_indicators: int = Field(description="Score 0-100")
+    role_domain_relevance: int = Field(description="Score 0-100")
+    reasoning: Reasoning
+    
+    # Enrichment Fields
+    fit_direction: str = Field(description="improved, declined, or unchanged")
+    whats_changed_summary: str = Field(description="A plain-language explanation of what changed in their public footprint")
+    re_engage_flag: bool = Field(description="True if it is a good time to re-engage, False otherwise")
+    status: str = Field(description="One of: 'Active opportunity', 'Re-engage', 'Watch', 'Faded'")
+
 SCORING_SYSTEM_PROMPT = """
-You are an expert AI hiring evaluator. You will receive a candidate's public profile data
+You are the HINT Master Persona, an expert AI hiring evaluator. You will receive a candidate's public profile data
 collected from GitHub, LinkedIn, Google Scholar, ResearchGate, Kaggle, Dev.to, Medium,
-and Hashnode, along with the job requirements.
+and Hashnode, along with the job requirements and their original role/tier.
 
-Evaluate the candidate across exactly these 9 dimensions and return ONLY a JSON object.
-No preamble, no markdown, no explanation — raw JSON only.
+Evaluate the candidate across exactly the 9 dimensions (score 0-100).
+Role domain relevance is the PRIMARY signal.
 
-Dimensions (score each 0–100):
-1. technical_competency    - Skills, languages, tools evident in repos/articles/projects
-2. problem_solving         - Complexity of projects, Kaggle competitions, research depth
-3. communication           - Quality of writing (articles, README, paper abstracts, bio)
-4. career_stability        - Consistent activity, no long unexplained gaps
-5. company_exposure        - Quality/prestige of orgs mentioned (GitHub org, Scholar affiliation)
-6. academic_signal         - Publications, citations, FYP papers, Google Scholar presence
-7. initiative              - Side projects, open source contributions, blogging, competitions
-8. risk_indicators         - Gaps, inconsistencies, very low activity, no public presence (higher = more risk)
-9. role_domain_relevance   - How closely the candidate's actual work matches the JD requirements (PRIMARY)
-
-Response format (strict JSON, no extras):
-{
-  "technical_competency": <int 0-100>,
-  "problem_solving": <int 0-100>,
-  "communication": <int 0-100>,
-  "career_stability": <int 0-100>,
-  "company_exposure": <int 0-100>,
-  "academic_signal": <int 0-100>,
-  "initiative": <int 0-100>,
-  "risk_indicators": <int 0-100>,
-  "role_domain_relevance": <int 0-100>,
-  "reasoning": {
-    "technical_competency": "<one sentence>",
-    "problem_solving": "<one sentence>",
-    "communication": "<one sentence>",
-    "career_stability": "<one sentence>",
-    "company_exposure": "<one sentence>",
-    "academic_signal": "<one sentence>",
-    "initiative": "<one sentence>",
-    "risk_indicators": "<one sentence>",
-    "role_domain_relevance": "<one sentence>"
-  }
-}
+Additionally, provide candidate re-scoring (fit_direction, whats_changed_summary, re_engage_flag) 
+and determine their talent radar status (Active opportunity, Re-engage, Watch, Faded) based on their signals.
 """
 
 
@@ -174,7 +175,8 @@ def collect_candidate_data(candidate_name: str, requirements: list[str],
 # STEP 2: Build AI prompt from collected data
 # ──────────────────────────────────────────────────────────
 def build_prompt(candidate_name: str, requirements: list[str],
-                 sources: dict, kws: list[str]) -> str:
+                 sources: dict, kws: list[str], 
+                 original_role: str = "", original_tier: str = "") -> str:
 
     def src_summary(key: str) -> str:
         d = sources.get(key, {})
@@ -207,6 +209,8 @@ def build_prompt(candidate_name: str, requirements: list[str],
 
     prompt = f"""
 CANDIDATE: {candidate_name}
+ORIGINAL ROLE: {original_role or 'Unknown'}
+ORIGINAL TIER: {original_tier or 'Unknown'}
 
 JOB REQUIREMENTS:
 {chr(10).join(f"- {r}" for r in requirements)}
@@ -239,237 +243,128 @@ PUBLIC PROFILE DATA:
 [Hashnode]
 {src_summary('hashnode')}
 
-Based on all the above, score this candidate across the 9 dimensions.
-Remember: role_domain_relevance is the PRIMARY signal.
-Return ONLY the JSON object as specified.
+Based on all the above, score this candidate and evaluate their re-engagement status.
 """
     return prompt.strip()
 
 
 # ──────────────────────────────────────────────────────────
-# STEP 3a: Call OpenRouter for scoring
+# STEP 3: Call Gemini for scoring (Structured JSON)
 # ──────────────────────────────────────────────────────────
-def call_openrouter(prompt: str) -> dict:
+def call_gemini(prompt: str) -> dict:
     print(f"\n{'═'*60}")
-    print(f"  STEP 2 — Sending to OpenRouter ({OPENROUTER_MODEL}) for scoring")
+    print(f"  STEP 2 — Sending to Gemini (gemini-flash-latest) for scoring")
     print(f"{'═'*60}")
 
-    if not OPENROUTER_API_KEY:
-        print("  ⚠ OPENROUTER_API_KEY is not set in .env")
+    if not GEMINI_API_KEY:
+        print("  ⚠ GEMINI_API_KEY is not set in .env")
         return {}
 
-    payload = {
-        "model": OPENROUTER_MODEL,
-        "messages": [
-            {"role": "system", "content": SCORING_SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
-        "max_tokens": 1000,
-    }
+    client = genai.Client(api_key=GEMINI_API_KEY)
 
-    raw = ""  # pre-declare so the except handler never sees an unbound name
     try:
-        r = requests.post(
-            OPENROUTER_API_URL,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            },
-            json=payload,
-            timeout=60,
+        response = client.models.generate_content(
+            model='gemini-flash-latest',
+            contents=prompt,
+            config=genai.types.GenerateContentConfig(
+                system_instruction=SCORING_SYSTEM_PROMPT,
+                temperature=0.1,
+                response_mime_type="application/json",
+                response_schema=CandidateEvaluation,
+            ),
         )
-        r.raise_for_status()
-        data = r.json()
+        return json.loads(response.text)
 
-        raw = data["choices"][0]["message"]["content"]
-
-        # Strip markdown fences if present
-        raw = re.sub(r"```json|```", "", raw).strip()
-        scores = json.loads(raw)
-        return scores
-
-    except json.JSONDecodeError as e:
-        print(f"  ⚠ JSON parse error: {e}")
-        print(f"  Raw response: {raw[:300]}")
-        return {}
     except Exception as e:
-        print(f"  ⚠ OpenRouter API error: {e}")
+        print(f"  ⚠ Gemini API error: {e}")
         return {}
 
 
-# ──────────────────────────────────────────────────────────
-# STEP 3b: Call local Ollama for scoring
-# ──────────────────────────────────────────────────────────
-def call_ollama(prompt: str) -> dict:
-    print(f"\n{'═'*60}")
-    print(f"  STEP 2 — Sending to local Ollama ({OLLAMA_MODEL}) for scoring")
-    print(f"{'═'*60}")
-
-    payload = {
-        "model": OLLAMA_MODEL,
-        "messages": [
-            {"role": "system", "content": SCORING_SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
-        "stream": False,
-    }
-
-    raw = ""  # pre-declare so the except handler never sees an unbound name
-    try:
-        r = requests.post(
-            f"{OLLAMA_BASE_URL}/api/chat",
-            json=payload,
-            timeout=120,
-        )
-        r.raise_for_status()
-        data = r.json()
-
-        raw = data.get("message", {}).get("content", "")
-
-        # Strip markdown fences if present
-        raw = re.sub(r"```json|```", "", raw).strip()
-        scores = json.loads(raw)
-        return scores
-
-    except json.JSONDecodeError as e:
-        print(f"  ⚠ JSON parse error: {e}")
-        print(f"  Raw response: {raw[:300]}")
-        return {}
-    except requests.exceptions.ConnectionError:
-        print(f"  ⚠ Could not connect to Ollama at {OLLAMA_BASE_URL}")
-        print(f"    Make sure Ollama is running locally (`ollama serve`) and the model is pulled")
-        print(f"    (`ollama pull {OLLAMA_MODEL}`).")
-        return {}
-    except Exception as e:
-        print(f"  ⚠ Ollama API error: {e}")
-        return {}
-
-
-# ──────────────────────────────────────────────────────────
-# STEP 4: Compute weighted rescoring score
-# ──────────────────────────────────────────────────────────
-def compute_rescoring_score(scores: dict) -> float:
-    """
-    Weighted sum across 9 dimensions.
-    risk_indicators is subtracted (higher risk = lower score).
-    Returns a 0–100 float.
-    """
-    total = 0.0
-    for dim, weight in WEIGHTS.items():
-        val = scores.get(dim, 0)
-        total += val * abs(weight) * (1 if weight > 0 else -1)
-
-    # Normalise to 0–100
-    score = max(0.0, min(100.0, total))
-    return round(score, 2)
-
-
-# ──────────────────────────────────────────────────────────
-# STEP 5: Print report + save to DB
-# ──────────────────────────────────────────────────────────
-def print_and_save(candidate_name: str, scores: dict,
-                   rescoring_score: float, requirements: list[str],
-                   usernames: dict | None = None):
-
-    print(f"\n{'═'*60}")
-    print(f"  STEP 3 — Results for: {candidate_name}")
-    print(f"{'═'*60}")
-
-    DIM_LABELS = {
-        "technical_competency":  "Technical Competency",
-        "problem_solving":       "Problem Solving",
-        "communication":         "Communication",
-        "career_stability":      "Career Stability",
-        "company_exposure":      "Company Exposure",
-        "academic_signal":       "Academic Signal",
-        "initiative":            "Initiative",
-        "risk_indicators":       "Risk Indicators  (–)",
-        "role_domain_relevance": "Role Domain Relevance  ★",
-    }
-
-    reasoning = scores.get("reasoning", {})
-    for key, label in DIM_LABELS.items():
-        val    = scores.get(key, "N/A")
-        reason = reasoning.get(key, "")
-        bar    = "█" * int((val or 0) // 10) if isinstance(val, (int, float)) else ""
-        print(f"\n  {label:<35} {str(val):>3}/100  {bar}")
-        if reason:
-            print(f"    └ {reason}")
-
-    print(f"\n{'─'*60}")
-    print(f"  ⭐ RESCORING SCORE  :  {rescoring_score} / 100")
-    print(f"{'─'*60}")
-
-    # Save to DB — store the raw 9 dimension scores + source usernames.
-    # (rescoring_score is still returned to the caller, but it's a computed
-    # value now, not persisted as its own column — see Backend/database/db.py)
-    dimensions = {k: scores.get(k, 0) for k in DIMENSION_KEYS}
-    row_id = insert_candidate(candidate_name, dimensions, usernames)
-    print(f"\n  ✅ Saved to DB  →  id={row_id}, name='{candidate_name}', "
-          f"rescoring_score={rescoring_score} (computed, not stored)")
-
-    return row_id
-
-
-# ──────────────────────────────────────────────────────────
-# MAIN PIPELINE
-# ──────────────────────────────────────────────────────────
 def evaluate_candidate(candidate_name: str, requirements: list[str],
-                       backend: str = "openrouter",
-                       usernames: dict | None = None) -> dict:
+                       backend: str = "gemini",
+                       usernames: dict | None = None,
+                       original_role: str = "", original_tier: str = "") -> dict | None:
     """
-    backend: "openrouter" or "ollama"
-    usernames: optional dict of source usernames, e.g.
-        {"github_username": "torvalds", "linkedin_username": "linus-torvalds"}
-        Saved to the DB alongside the candidate and now also forwarded to
-        the individual platform searchers so that an exact handle is used
-        instead of guessing from the candidate's full name.
+    Run the full extraction -> prompt generation -> Gemini scoring pipeline.
+    Returns a dict with dimensions, final score, reasoning, sources, and DB ID.
     """
-    # 1. Collect (pass usernames so search_* functions can use them directly)
+    if not candidate_name.strip():
+        print("⚠ No candidate name provided. Aborting.")
+        return None
+    if not requirements:
+        print("⚠ No requirements provided. Aborting.")
+        return None
+
+    # 1. Search profiles
     sources, kws = collect_candidate_data(candidate_name, requirements, usernames)
+    if not any(sources.values()):
+        print("⚠ No profiles found across any platform. Aborting.")
+        return None
 
     # 2. Build prompt
-    prompt = build_prompt(candidate_name, requirements, sources, kws)
+    prompt = build_prompt(candidate_name, requirements, sources, kws, original_role, original_tier)
 
-    # 3. Score via chosen backend
-    if backend == "ollama":
-        scores = call_ollama(prompt)
-    elif backend == "openrouter":
-        scores = call_openrouter(prompt)
-    else:
-        print(f"  ❌ Unknown backend '{backend}'. Use 'openrouter' or 'ollama'.")
-        return {}
+    # 3. Call AI
+    scores = call_gemini(prompt)
 
+    scoring_failed = False
     if not scores:
-        # AI scoring failed — still return the collected source data
-        # so the frontend can show the analytics dashboard.
-        print("  ⚠ Scoring failed — returning collected data without AI scores.")
-        zero_scores = {k: 0 for k in DIMENSION_KEYS}
-        zero_scores["reasoning"] = {}
-        return {
-            "candidate":      candidate_name,
-            "scores":         zero_scores,
-            "rescoring_score": 0.0,
-            "sources":        sources,
-            "db_id":          -1,          # not saved to DB
-            "backend":        backend,
-            "scoring_failed": True,
-        }
+        print("⚠ AI scoring returned empty or failed. Using 0 for all dimensions.")
+        scores = {k: 0 for k in DIMENSION_KEYS}
+        scores["reasoning"] = {k: "AI evaluation failed" for k in DIMENSION_KEYS}
+        scores["fit_direction"] = "unchanged"
+        scores["whats_changed_summary"] = "AI evaluation failed"
+        scores["re_engage_flag"] = False
+        scores["status"] = "Watch"
+        scoring_failed = True
 
-    # 4. Weighted total
-    rescoring_score = compute_rescoring_score(scores)
+    # 4. Compute final rescoring score
+    rescoring_score = 0.0
+    for dim, weight in WEIGHTS.items():
+        s = scores.get(dim, 0)
+        # Risk indicators are subtracted, all others added
+        if weight < 0:
+            rescoring_score -= s * abs(weight)
+        else:
+            rescoring_score += s * weight
 
-    # 5. Print + save
-    row_id = print_and_save(candidate_name, scores, rescoring_score,
-                            requirements, usernames)
+    # Cap between 0 and 100
+    rescoring_score = max(0.0, min(100.0, rescoring_score))
+
+    print(f"\n{'═'*60}")
+    print(f"  STEP 3 — Final Candidate Score: {rescoring_score:.1f}/100")
+    print(f"{'═'*60}")
+
+    # 5. Extract usernames and save to DB
+    u_save = {
+        "github_username":   sources.get("github", {}).get("username"),
+        "linkedin_username": sources.get("linkedin", {}).get("username"),
+        "kaggle_username":   sources.get("kaggle", {}).get("username"),
+        "devto_username":    sources.get("devto", {}).get("username"),
+        "medium_username":   sources.get("medium", {}).get("username"),
+        "hashnode_username": sources.get("hashnode", {}).get("username"),
+    }
+
+    db_id = insert_candidate(
+        name=candidate_name,
+        dimensions=scores,
+        usernames=u_save,
+        original_role=original_role,
+        original_tier=original_tier,
+        fit_direction=scores.get("fit_direction", ""),
+        whats_changed_summary=scores.get("whats_changed_summary", ""),
+        re_engage_flag=scores.get("re_engage_flag", False),
+        status=scores.get("status", "")
+    )
+    print(f"  ✓ Saved to database with ID {db_id}")
 
     return {
-        "candidate":       candidate_name,
-        "scores":          scores,
+        "candidate_name": candidate_name,
         "rescoring_score": rescoring_score,
-        "sources":         sources,
-        "db_id":           row_id,
-        "backend":         backend,
+        "scores": scores,
+        "sources": sources,
+        "db_id": db_id,
+        "scoring_failed": scoring_failed,
     }
 
 
