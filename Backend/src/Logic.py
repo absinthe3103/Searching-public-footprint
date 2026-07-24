@@ -62,7 +62,9 @@ app.add_middleware(
 class EvaluateRequest(BaseModel):
     candidate_name:   str
     job_requirements: list[str]
-    backend:          str = "openrouter"   # "openrouter" or "ollama"
+    original_role:    str | None = None
+    original_tier:    str | None = None
+    backend:          str = "gemini"   # updated to gemini
 
     # Optional exact usernames/URLs for each platform
     github_username:            str | None = None
@@ -71,28 +73,24 @@ class EvaluateRequest(BaseModel):
     devto_username:             str | None = None
     medium_username:            str | None = None
     hashnode_username:          str | None = None
-    # Scholar: Google Scholar user ID, Semantic Scholar author ID/URL, or full URL
     google_scholar_identifier:  str | None = None
-    # ResearchGate: profile slug, ORCID iD (xxxx-xxxx-xxxx-xxxx), or full URL
     researchgate_identifier:    str | None = None
 
     class Config:
         json_schema_extra = {
             "example": {
                 "candidate_name":   "Andrew Ng",
+                "original_role":    "Senior Research Scientist",
+                "original_tier":    "Tier 1",
                 "job_requirements": [
                     "Machine Learning",
                     "Python",
                     "Deep Learning",
                     "Published research",
                 ],
-                "backend": "openrouter",
+                "backend": "gemini",
                 "github_username": "andrewyng",
-                "linkedin_username": "andrewyng",
-                "kaggle_username": None,
-                "devto_username": None,
-                "medium_username": None,
-                "hashnode_username": None
+                "linkedin_username": "andrewyng"
             }
         }
 
@@ -122,18 +120,29 @@ class SourceURLs(BaseModel):
 
 class EvaluateResponse(BaseModel):
     candidate_name:  str
+    original_role:   str | None
+    original_tier:   str | None
     rescoring_score: float
     dimensions:      DimensionScores
     reasoning:       dict
     source_urls:     SourceURLs
     source_details:  dict[str, Any]
     db_id:           int
-    scoring_failed:  bool = False   # True when AI scoring was skipped
+    scoring_failed:  bool = False
+    
+    # Enrichment fields
+    fit_direction:         str
+    whats_changed_summary: str
+    re_engage_flag:        bool
+    status:                str
+    possible_profiles:     dict[str, list[str]] = {}
 
 
 class CandidateRow(BaseModel):
     id:   int
     name: str
+    original_role:   str | None = None
+    original_tier:   str | None = None
 
     # Source usernames
     github_username:   str | None = None
@@ -143,7 +152,7 @@ class CandidateRow(BaseModel):
     medium_username:   str | None = None
     hashnode_username: str | None = None
 
-    # 9 dimension scores (replaces the old single rescoring_score column)
+    # 9 dimension scores
     technical_competency:  float
     problem_solving:       float
     communication:         float
@@ -153,6 +162,12 @@ class CandidateRow(BaseModel):
     initiative:            float
     risk_indicators:       float
     role_domain_relevance: float
+
+    # Enrichment fields
+    fit_direction:         str | None = None
+    whats_changed_summary: str | None = None
+    re_engage_flag:        bool | None = None
+    status:                str | None = None
 
     created_at: str
 
@@ -180,10 +195,10 @@ async def evaluate(req: EvaluateRequest):
         raise HTTPException(status_code=400, detail="candidate_name cannot be empty.")
     if not req.job_requirements:
         raise HTTPException(status_code=400, detail="job_requirements cannot be empty.")
-    if req.backend not in ("openrouter", "ollama"):
+    if req.backend not in ("openrouter", "ollama", "gemini"):
         raise HTTPException(
             status_code=400,
-            detail=f"backend must be 'openrouter' or 'ollama', got '{req.backend}'."
+            detail=f"backend must be 'openrouter', 'ollama', or 'gemini', got '{req.backend}'."
         )
 
     usernames = {
@@ -202,6 +217,8 @@ async def evaluate(req: EvaluateRequest):
         requirements=req.job_requirements,
         backend=req.backend,
         usernames=usernames,
+        original_role=req.original_role,
+        original_tier=req.original_tier,
     )
 
     # result is None only if backend name was invalid or a fatal error occurred
@@ -256,8 +273,16 @@ async def evaluate(req: EvaluateRequest):
         for key, value in sources.items()
     }
 
+    possible_profiles = {
+        key: value.get("possible_profiles", [])
+        for key, value in sources.items()
+        if value.get("possible_profiles")
+    }
+
     return EvaluateResponse(
         candidate_name=req.candidate_name,
+        original_role=req.original_role,
+        original_tier=req.original_tier,
         rescoring_score=result["rescoring_score"],
         dimensions=DimensionScores(**dimensions),
         reasoning=reasoning,
@@ -265,6 +290,11 @@ async def evaluate(req: EvaluateRequest):
         source_details=source_details,
         db_id=result.get("db_id", -1),
         scoring_failed=result.get("scoring_failed", False),
+        fit_direction=scores.get("fit_direction"),
+        whats_changed_summary=scores.get("whats_changed_summary"),
+        re_engage_flag=scores.get("re_engage_flag"),
+        status=scores.get("status"),
+        possible_profiles=possible_profiles,
     )
 
 
