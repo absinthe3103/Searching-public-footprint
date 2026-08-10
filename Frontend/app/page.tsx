@@ -30,6 +30,7 @@ interface EvaluateResponse {
   candidate_name: string
   rescoring_score: number
   dimensions: DimensionScores
+  culture_fit_dimensions?: string[]
   reasoning: Record<string, string>
   source_urls: SourceURLs
   source_details?: Record<string, any>
@@ -41,6 +42,25 @@ interface EvaluateResponse {
   re_engage_flag?: boolean
   original_role?: string
   original_tier?: string
+  university?: string
+  summary_profile?: string
+}
+
+interface PreferredUniversity {
+  id: number
+  name: string
+  created_at: string
+}
+
+interface TalentRadarCandidate {
+  id: number
+  name: string
+  university?: string | null
+  culture_fit_dimensions?: string[]
+  university_match?: boolean
+  matched_culture_dimensions?: string[]
+  preference_match?: boolean
+  [key: string]: any   // remaining CandidateRow fields (status, scores, etc.)
 }
 
 /* ── Constants ──────────────────────────────────────────── */
@@ -67,6 +87,17 @@ const SOURCES = [
   { key: 'devto', label: 'Dev.to', icon: 'ti-brand-deviantart' },
   { key: 'medium', label: 'Medium', icon: 'ti-pencil' },
   { key: 'hashnode', label: 'Hashnode', icon: 'ti-hash' },
+] as const
+
+// Must match Backend/database/db.py CULTURE_DIMENSIONS exactly (same keys)
+const CULTURE_DIMENSIONS = [
+  { key: 'innovation_risk_taking', label: 'Innovation & Risk Taking' },
+  { key: 'attention_to_detail',    label: 'Attention to Detail' },
+  { key: 'outcome_orientation',    label: 'Outcome Orientation' },
+  { key: 'people_orientation',     label: 'People Orientation' },
+  { key: 'team_orientation',       label: 'Team Orientation' },
+  { key: 'aggressiveness',         label: 'Aggressiveness' },
+  { key: 'stability',              label: 'Stability' },
 ] as const
 
 const USERNAME_FIELDS = [
@@ -206,10 +237,12 @@ function drawRadar(canvas: HTMLCanvasElement, scores: DimensionScores) {
    PAGE COMPONENT
 ══════════════════════════════════════════════════════════ */
 export default function Page() {
-  const [view, setView] = useState<'search' | 'talent_radar'>('search')
+  const [view, setView] = useState<'search' | 'talent_radar' | 'preferences'>('search')
   const [candidateName, setCandidateName] = useState('')
   const [originalRole, setOriginalRole] = useState('Senior Backend Engineer')
   const [originalTier, setOriginalTier] = useState('Tier 1')
+  const [university, setUniversity] = useState('')
+  const [summaryProfile, setSummaryProfile] = useState('')
   const [requirements, setRequirements] = useState<string[]>([
     'Python', 'Machine Learning', 'API Design'
   ])
@@ -226,6 +259,13 @@ export default function Page() {
   })
   const [showUsernames, setShowUsernames] = useState(false)
   const [fieldUrlHints, setFieldUrlHints] = useState<Record<string, boolean>>({})
+
+  // ── Preferences page state ──
+  const [culturePrefs, setCulturePrefs] = useState<Record<string, boolean>>({})
+  const [preferredUnis, setPreferredUnis] = useState<PreferredUniversity[]>([])
+  const [newUniInput, setNewUniInput] = useState('')
+  const [prefsLoading, setPrefsLoading] = useState(false)
+  const [prefsError, setPrefsError] = useState<string | null>(null)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -251,6 +291,74 @@ export default function Page() {
     const wasUrl = username !== raw.trim() && raw.trim().length > 0
     setUsernames(prev => ({ ...prev, [key]: username }))
     setFieldUrlHints(prev => ({ ...prev, [key]: wasUrl }))
+  }, [])
+
+  /* ── Preferences page ── */
+  const fetchPreferences = useCallback(async () => {
+    setPrefsLoading(true)
+    setPrefsError(null)
+    try {
+      const [cultureRes, unisRes] = await Promise.all([
+        fetch(`${API_URL}/preferences/culture`),
+        fetch(`${API_URL}/preferences/universities`),
+      ])
+      if (!cultureRes.ok || !unisRes.ok) throw new Error('Failed to load preferences.')
+      setCulturePrefs(await cultureRes.json())
+      setPreferredUnis(await unisRes.json())
+    } catch (e: unknown) {
+      setPrefsError(e instanceof Error ? e.message : 'Unknown error')
+    } finally {
+      setPrefsLoading(false)
+    }
+  }, [])
+
+  const toggleCultureDim = useCallback(async (dimKey: string) => {
+    const nextSelected = Object.entries({ ...culturePrefs, [dimKey]: !culturePrefs[dimKey] })
+      .filter(([, on]) => on)
+      .map(([key]) => key)
+
+    // Optimistic update — flip immediately, reconcile with server response
+    setCulturePrefs(prev => ({ ...prev, [dimKey]: !prev[dimKey] }))
+    try {
+      const res = await fetch(`${API_URL}/preferences/culture`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selected: nextSelected }),
+      })
+      if (res.ok) setCulturePrefs(await res.json())
+    } catch (e) {
+      console.error('Failed to update culture preferences', e)
+    }
+  }, [culturePrefs])
+
+  const addUniversity = useCallback(async () => {
+    const name = newUniInput.trim()
+    if (!name) return
+    try {
+      const res = await fetch(`${API_URL}/preferences/universities`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }))
+        throw new Error(err.detail ?? `HTTP ${res.status}`)
+      }
+      const created: PreferredUniversity = await res.json()
+      setPreferredUnis(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)))
+      setNewUniInput('')
+    } catch (e: unknown) {
+      setPrefsError(e instanceof Error ? e.message : 'Unknown error')
+    }
+  }, [newUniInput])
+
+  const removeUniversity = useCallback(async (id: number) => {
+    setPreferredUnis(prev => prev.filter(u => u.id !== id))  // optimistic
+    try {
+      await fetch(`${API_URL}/preferences/universities/${id}`, { method: 'DELETE' })
+    } catch (e) {
+      console.error('Failed to remove university', e)
+    }
   }, [])
 
 
@@ -283,6 +391,8 @@ export default function Page() {
           candidate_name: candidateName.trim(),
           original_role: originalRole.trim(),
           original_tier: originalTier.trim(),
+          university: university.trim() || null,
+          summary_profile: summaryProfile.trim() || null,
           job_requirements: requirements,
           backend: 'gemini',
           ...usernamePayload,
@@ -303,7 +413,7 @@ export default function Page() {
       clearInterval(interval)
       setLoading(false)
     }
-  }, [candidateName, requirements, usernames, originalRole, originalTier])
+  }, [candidateName, requirements, usernames, originalRole, originalTier, university, summaryProfile])
 
   // Redraw radar chart whenever the tab changes or result updates
   useEffect(() => {
@@ -451,7 +561,7 @@ export default function Page() {
                 onClick={async () => {
                   setView('talent_radar')
                   try {
-                    const res = await fetch(`${API_URL}/candidates`)
+                    const res = await fetch(`${API_URL}/candidates/prioritized`)
                     if (res.ok) setCandidates(await res.json())
                   } catch (e) {
                     console.error('Failed to fetch candidates', e)
@@ -470,6 +580,21 @@ export default function Page() {
               >
                 Talent Radar
               </button>
+              <button
+                onClick={() => { setView('preferences'); fetchPreferences() }}
+                style={{
+                  background: view === 'preferences' ? 'var(--navy4)' : 'transparent',
+                  border: 'none',
+                  color: view === 'preferences' ? 'var(--gold2)' : 'var(--slate2)',
+                  padding: '8px 16px',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  fontSize: 12
+                }}
+              >
+                Preferences
+              </button>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <span className="badge badge-gold">9 dimensions</span>
@@ -481,7 +606,112 @@ export default function Page() {
         {/* Body */}
         <div style={styles.body} className="layout-split">
 
-          {view === 'talent_radar' ? (
+          {view === 'preferences' ? (
+            <div style={{ padding: '24px 40px', width: '100%', maxWidth: 900, margin: '0 auto', overflowY: 'auto' }}>
+              <h2 style={{ fontSize: 24, fontWeight: 600, color: 'white', marginBottom: 8 }}>Preferences</h2>
+              <p style={{ color: 'var(--slate2)', fontSize: 13, marginBottom: 32 }}>
+                Set what HR is looking for. The Talent Radar surfaces matching candidates first — this never changes a candidate's underlying score.
+              </p>
+
+              {prefsError && (
+                <div style={{ background: 'rgba(231,76,60,0.08)', border: '0.5px solid var(--red)', color: 'var(--red)', padding: 10, borderRadius: 6, fontSize: 12, marginBottom: 20 }}>
+                  {prefsError}
+                </div>
+              )}
+
+              {prefsLoading ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--slate2)', fontSize: 13 }}>
+                  <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                  Loading preferences...
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+
+                  {/* Culture dimensions — multi-select chips */}
+                  <div>
+                    <h3 style={{ fontSize: 15, fontWeight: 500, color: 'var(--gold2)', marginBottom: 4 }}>
+                      Company Culture
+                    </h3>
+                    <p style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 12 }}>
+                      Select the dimensions that matter for this role. A candidate matches when their Summary Profile reflects any of these.
+                    </p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {CULTURE_DIMENSIONS.map(dim => {
+                        const isSelected = !!culturePrefs[dim.key]
+                        return (
+                          <button
+                            key={dim.key}
+                            onClick={() => toggleCultureDim(dim.key)}
+                            style={{
+                              background: isSelected ? 'var(--gold-dim)' : 'var(--navy4)',
+                              border: `0.5px solid ${isSelected ? 'var(--gold)' : 'var(--border)'}`,
+                              color: isSelected ? 'var(--navy)' : 'var(--slate2)',
+                              padding: '5px 10px',
+                              borderRadius: 12,
+                              fontSize: 11.5,
+                              cursor: 'pointer',
+                              transition: 'all 0.2s',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 5,
+                            }}
+                          >
+                            {dim.label} <i className={`ti ${isSelected ? 'ti-check' : 'ti-plus'}`} style={{ fontSize: 10 }} />
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Preferred universities — free-form CRUD list */}
+                  <div>
+                    <h3 style={{ fontSize: 15, fontWeight: 500, color: 'var(--gold2)', marginBottom: 4 }}>
+                      Preferred Universities
+                    </h3>
+                    <p style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 12 }}>
+                      Candidates from these universities are surfaced first on the Talent Radar.
+                    </p>
+
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 12, maxWidth: 360 }}>
+                      <input
+                        className="field-input"
+                        style={{ flex: 1 }}
+                        placeholder="e.g. UTAR"
+                        value={newUniInput}
+                        onChange={e => setNewUniInput(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && addUniversity()}
+                      />
+                      <button className="btn btn-ghost" onClick={addUniversity} aria-label="Add university" style={{ padding: '9px 12px' }}>
+                        <i className="ti ti-plus" aria-hidden style={{ fontSize: 15 }} />
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 360 }}>
+                      {preferredUnis.map(u => (
+                        <div key={u.id} style={styles.reqItem}>
+                          <i className="ti ti-school" aria-hidden style={{ color: 'var(--gold)', fontSize: 13, flexShrink: 0 }} />
+                          <span style={{ fontSize: 12, flex: 1 }}>{u.name}</span>
+                          <button
+                            onClick={() => removeUniversity(u.id)}
+                            style={styles.reqRemove}
+                            aria-label={`Remove ${u.name}`}
+                          >
+                            <i className="ti ti-x" aria-hidden style={{ fontSize: 12 }} />
+                          </button>
+                        </div>
+                      ))}
+                      {preferredUnis.length === 0 && (
+                        <div style={{ fontSize: 11.5, color: 'var(--muted)', fontStyle: 'italic', padding: '8px 0' }}>
+                          No preferred universities set yet.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                </div>
+              )}
+            </div>
+          ) : view === 'talent_radar' ? (
             <div style={{ padding: '24px 40px', width: '100%', maxWidth: 1200, margin: '0 auto', overflowY: 'auto' }}>
               <h2 style={{ fontSize: 24, fontWeight: 600, color: 'white', marginBottom: 8 }}>Talent Radar</h2>
               <p style={{ color: 'var(--slate2)', fontSize: 13, marginBottom: 32 }}>All shortlisted candidates from past sessions, grouped by current status.</p>
@@ -498,7 +728,7 @@ export default function Page() {
                       </h3>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
                         {group.map(c => (
-                          <div key={c.id} style={{ background: 'var(--navy3)', border: '1px solid var(--border)', borderRadius: 8, padding: 16 }}>
+                          <div key={c.id} style={{ background: 'var(--navy3)', border: c.preference_match ? '1px solid var(--gold-dim)' : '1px solid var(--border)', borderRadius: 8, padding: 16 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                               <div>
                                 <div style={{ fontWeight: 600, color: 'white', fontSize: 15 }}>{c.name}</div>
@@ -508,6 +738,25 @@ export default function Page() {
                                 <span style={{ background: 'rgba(46, 204, 113, 0.1)', color: 'var(--green)', padding: '2px 8px', borderRadius: 12, fontSize: 10, fontWeight: 600 }}>ACT NOW</span>
                               )}
                             </div>
+
+                            {/* Preference match badges — visible reasons this candidate
+                            was surfaced, not a silently-applied score boost */}
+                            {(c.university_match || (c.matched_culture_dimensions?.length > 0)) && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 10 }}>
+                                {c.university_match && (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(201,168,76,0.10)', border: '0.5px solid var(--gold-border)', color: 'var(--gold2)', padding: '2px 8px', borderRadius: 10, fontSize: 10 }}>
+                                    <i className="ti ti-school" aria-hidden style={{ fontSize: 10 }} />
+                                    {c.university}
+                                  </span>
+                                )}
+                                {c.matched_culture_dimensions?.map((dim: string) => (
+                                  <span key={dim} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(201,168,76,0.10)', border: '0.5px solid var(--gold-border)', color: 'var(--gold2)', padding: '2px 8px', borderRadius: 10, fontSize: 10 }}>
+                                    <i className="ti ti-sparkles" aria-hidden style={{ fontSize: 10 }} />
+                                    {CULTURE_DIMENSIONS.find(d => d.key === dim)?.label ?? dim}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
 
                             <div style={{ fontSize: 12, color: 'var(--slate2)', background: 'var(--navy4)', padding: 10, borderRadius: 6, marginBottom: 12 }}>
                               {c.whats_changed_summary || 'No recent updates available.'}
@@ -613,6 +862,30 @@ export default function Page() {
                     placeholder="e.g. Tier 1"
                     value={originalTier}
                     onChange={e => setOriginalTier(e.target.value)}
+                  />
+                </div>
+
+                {/* University + Summary Profile — both optional, stacked.
+                Summary Profile lets the AI determine which organizational
+                culture dimension(s) the candidate fits, based only on this text. */}
+                <div style={{ marginBottom: 20 }}>
+                  <label className="field-label">University (optional)</label>
+                  <input
+                    className="field-input"
+                    placeholder="e.g. UTAR"
+                    value={university}
+                    onChange={e => setUniversity(e.target.value)}
+                  />
+                </div>
+                <div style={{ marginBottom: 20 }}>
+                  <label className="field-label">Summary Profile (optional)</label>
+                  <textarea
+                    className="field-input"
+                    placeholder="Short paragraph describing the candidate's working style..."
+                    value={summaryProfile}
+                    onChange={e => setSummaryProfile(e.target.value)}
+                    rows={3}
+                    style={{ resize: 'vertical', minHeight: 60, width: '100%', fontFamily: 'inherit' }}
                   />
                 </div>
 
