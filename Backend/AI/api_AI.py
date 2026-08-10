@@ -45,7 +45,7 @@ _BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(_BACKEND, "database"))
 sys.path.insert(0, os.path.join(_BACKEND, "src"))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from db import insert_candidate, get_all_candidates
+from db import insert_candidate, get_all_candidates, CULTURE_DIMENSIONS
 
 # ── OpenRouter API ───────────────────────────────────────
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -99,6 +99,19 @@ class CandidateEvaluation(BaseModel):
     risk_indicators: int = Field(description="Score 0-100")
     role_domain_relevance: int = Field(description="Score 0-100")
     reasoning: Reasoning
+
+    # Culture fit — only meaningful when a summary_profile was supplied.
+    # List of CULTURE_DIMENSIONS keys (from Backend/database/db.py) that best
+    # describe the candidate based on their summary_profile paragraph.
+    # Return an empty list if no summary_profile was given.
+    culture_fit_dimensions: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Subset of these exact keys that fit the candidate's summary_profile: "
+            + ", ".join(CULTURE_DIMENSIONS)
+            + ". Empty list if no summary_profile was provided."
+        )
+    )
     
     # Enrichment Fields
     fit_direction: str = Field(description="improved, declined, or unchanged")
@@ -116,6 +129,12 @@ Role domain relevance is the PRIMARY signal.
 
 Additionally, provide candidate re-scoring (fit_direction, whats_changed_summary, re_engage_flag) 
 and determine their talent radar status (Active opportunity, Re-engage, Watch, Faded) based on their signals.
+
+If a SUMMARY PROFILE paragraph is provided, read it and select every organizational
+culture dimension (from the fixed list of 7) that the paragraph reflects — a
+candidate can match multiple dimensions. Base this only on what the paragraph
+actually says; do not infer culture fit from GitHub/LinkedIn data. If no
+summary profile is provided, return an empty list for culture_fit_dimensions.
 """
 
 
@@ -176,7 +195,8 @@ def collect_candidate_data(candidate_name: str, requirements: list[str],
 # ──────────────────────────────────────────────────────────
 def build_prompt(candidate_name: str, requirements: list[str],
                  sources: dict, kws: list[str], 
-                 original_role: str = "", original_tier: str = "") -> str:
+                 original_role: str = "", original_tier: str = "",
+                 university: str = "", summary_profile: str = "") -> str:
 
     def src_summary(key: str) -> str:
         d = sources.get(key, {})
@@ -207,11 +227,18 @@ def build_prompt(candidate_name: str, requirements: list[str],
             lines.append(f"  Keywords matched: {kw_hits}")
         return "\n".join(lines)
 
+    summary_profile_block = (
+        f"\nSUMMARY PROFILE (candidate-provided):\n{summary_profile}\n"
+        if summary_profile else
+        "\nSUMMARY PROFILE: Not provided — return an empty list for culture_fit_dimensions.\n"
+    )
+
     prompt = f"""
 CANDIDATE: {candidate_name}
 ORIGINAL ROLE: {original_role or 'Unknown'}
 ORIGINAL TIER: {original_tier or 'Unknown'}
-
+UNIVERSITY: {university or 'Unknown'}
+{summary_profile_block}
 JOB REQUIREMENTS:
 {chr(10).join(f"- {r}" for r in requirements)}
 
@@ -283,7 +310,8 @@ def call_gemini(prompt: str) -> dict:
 def evaluate_candidate(candidate_name: str, requirements: list[str],
                        backend: str = "gemini",
                        usernames: dict | None = None,
-                       original_role: str = "", original_tier: str = "") -> dict | None:
+                       original_role: str = "", original_tier: str = "",
+                       university: str = "", summary_profile: str = "") -> dict | None:
     """
     Run the full extraction -> prompt generation -> Gemini scoring pipeline.
     Returns a dict with dimensions, final score, reasoning, sources, and DB ID.
@@ -302,7 +330,8 @@ def evaluate_candidate(candidate_name: str, requirements: list[str],
         return None
 
     # 2. Build prompt
-    prompt = build_prompt(candidate_name, requirements, sources, kws, original_role, original_tier)
+    prompt = build_prompt(candidate_name, requirements, sources, kws,
+                          original_role, original_tier, university, summary_profile)
 
     # 3. Call AI
     scores = call_gemini(prompt)
@@ -316,6 +345,7 @@ def evaluate_candidate(candidate_name: str, requirements: list[str],
         scores["whats_changed_summary"] = "AI evaluation failed"
         scores["re_engage_flag"] = False
         scores["status"] = "Watch"
+        scores["culture_fit_dimensions"] = []
         scoring_failed = True
 
     # 4. Compute final rescoring score
@@ -351,6 +381,11 @@ def evaluate_candidate(candidate_name: str, requirements: list[str],
         usernames=u_save,
         original_role=original_role,
         original_tier=original_tier,
+        university=university,
+        summary_profile=summary_profile,
+        culture_fit_dimensions=[
+            d for d in scores.get("culture_fit_dimensions", []) if d in CULTURE_DIMENSIONS
+        ],
         fit_direction=scores.get("fit_direction", ""),
         whats_changed_summary=scores.get("whats_changed_summary", ""),
         re_engage_flag=scores.get("re_engage_flag", False),
