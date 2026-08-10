@@ -225,6 +225,7 @@ export default function Page() {
     kaggle_username: '', devto_username: '', medium_username: '', hashnode_username: '',
   })
   const [showUsernames, setShowUsernames] = useState(false)
+  const [backend, setBackend] = useState<'gemini' | 'ollama' | 'openrouter'>('gemini')
   const [fieldUrlHints, setFieldUrlHints] = useState<Record<string, boolean>>({})
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -284,7 +285,7 @@ export default function Page() {
           original_role: originalRole.trim(),
           original_tier: originalTier.trim(),
           job_requirements: requirements,
-          backend: 'gemini',
+          backend: backend,
           ...usernamePayload,
         }),
       })
@@ -473,7 +474,9 @@ export default function Page() {
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <span className="badge badge-gold">9 dimensions</span>
-              <span className="badge badge-gold">Gemini Flash</span>
+              <span className="badge badge-gold">
+                {backend === 'gemini' ? 'Gemini Flash' : backend === 'ollama' ? 'Ollama (Local)' : 'OpenRouter'}
+              </span>
             </div>
           </div>
         </header>
@@ -685,10 +688,56 @@ export default function Page() {
                   </button>
                 </div>
 
+                {/* AI Backend Selector */}
+                <div style={{ marginBottom: 16, marginTop: 20 }}>
+                  <label className="field-label" style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <i className="ti ti-cpu" aria-hidden style={{ fontSize: 11 }} />
+                    AI Backend
+                  </label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {([
+                      { value: 'gemini',     label: 'Gemini',     icon: 'ti-sparkles',    desc: 'Google Gemini Flash' },
+                      { value: 'ollama',     label: 'Ollama',     icon: 'ti-server',      desc: 'Local model' },
+                      { value: 'openrouter', label: 'OpenRouter', icon: 'ti-cloud',       desc: 'DeepSeek / Claude' },
+                    ] as const).map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setBackend(opt.value)}
+                        title={opt.desc}
+                        style={{
+                          flex: 1,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: 4,
+                          padding: '8px 6px',
+                          borderRadius: 8,
+                          cursor: 'pointer',
+                          fontFamily: 'inherit',
+                          fontSize: 10.5,
+                          fontWeight: backend === opt.value ? 600 : 400,
+                          transition: 'all 0.15s',
+                          background: backend === opt.value ? 'rgba(201,168,76,0.12)' : 'var(--navy3)',
+                          border: backend === opt.value ? '1.5px solid var(--gold-dim)' : '0.5px solid var(--border)',
+                          color: backend === opt.value ? 'var(--gold2)' : 'var(--slate2)',
+                        }}
+                      >
+                        <i className={`ti ${opt.icon}`} aria-hidden style={{ fontSize: 15 }} />
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 10, color: 'var(--muted)', textAlign: 'center' }}>
+                    {backend === 'gemini'     && 'Requires GEMINI_API_KEY in .env'}
+                    {backend === 'ollama'     && 'Local — make sure ollama is running + model pulled'}
+                    {backend === 'openrouter' && 'Requires OPENROUTER_API_KEY in .env'}
+                  </div>
+                </div>
+
                 {/* Evaluate button */}
                 <button
                   className="btn btn-primary"
-                  style={{ width: '100%', marginTop: 24 }}
+                  style={{ width: '100%', marginTop: 8 }}
                   onClick={runEval}
                   disabled={loading}
                 >

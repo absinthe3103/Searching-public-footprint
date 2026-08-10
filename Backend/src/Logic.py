@@ -67,6 +67,7 @@ class EvaluateRequest(BaseModel):
     backend:          str = "gemini"   # updated to gemini
 
     # Optional exact usernames/URLs for each platform
+    # IT
     github_username:            str | None = None
     linkedin_username:          str | None = None
     kaggle_username:            str | None = None
@@ -75,6 +76,21 @@ class EvaluateRequest(BaseModel):
     hashnode_username:          str | None = None
     google_scholar_identifier:  str | None = None
     researchgate_identifier:    str | None = None
+    # Marketing
+    instagram_username:         str | None = None
+    tiktok_username:            str | None = None
+    meta_ad_page:               str | None = None
+    similarweb_domain:          str | None = None
+    # HR
+    shrm_identifier:            str | None = None
+    cipd_identifier:            str | None = None
+    glassdoor_employer:         str | None = None
+    company_identifier:         str | None = None
+    # Design
+    behance_username:           str | None = None
+    dribbble_username:          str | None = None
+    # Finance
+    finance_license_identifier: str | None = None
 
     class Config:
         json_schema_extra = {
@@ -108,14 +124,30 @@ class DimensionScores(BaseModel):
 
 
 class SourceURLs(BaseModel):
-    github:         str | None
-    linkedin:       str | None
-    google_scholar: str | None
-    researchgate:   str | None
-    kaggle:         str | None
-    devto:          str | None
-    medium:         str | None
-    hashnode:       str | None
+    # IT
+    github:         str | None = None
+    linkedin:       str | None = None
+    google_scholar: str | None = None
+    researchgate:   str | None = None
+    kaggle:         str | None = None
+    devto:          str | None = None
+    medium:         str | None = None
+    hashnode:       str | None = None
+    # Marketing
+    instagram:       str | None = None
+    tiktok:          str | None = None
+    meta_ad_library: str | None = None
+    similarweb:      str | None = None
+    # HR
+    shrm:     str | None = None
+    cipd:     str | None = None
+    glassdoor: str | None = None
+    ssm_acra:  str | None = None
+    # Design
+    behance:  str | None = None
+    dribbble: str | None = None
+    # Finance
+    sc_mq:    str | None = None
 
 
 class EvaluateResponse(BaseModel):
@@ -202,14 +234,30 @@ async def evaluate(req: EvaluateRequest):
         )
 
     usernames = {
-        "github_username":           req.github_username,
-        "linkedin_username":         req.linkedin_username,
-        "kaggle_username":           req.kaggle_username,
-        "devto_username":            req.devto_username,
-        "medium_username":           req.medium_username,
-        "hashnode_username":         req.hashnode_username,
-        "google_scholar_identifier": req.google_scholar_identifier,
-        "researchgate_identifier":   req.researchgate_identifier,
+        # IT
+        "github_username":            req.github_username,
+        "linkedin_username":          req.linkedin_username,
+        "kaggle_username":            req.kaggle_username,
+        "devto_username":             req.devto_username,
+        "medium_username":            req.medium_username,
+        "hashnode_username":          req.hashnode_username,
+        "google_scholar_identifier":  req.google_scholar_identifier,
+        "researchgate_identifier":    req.researchgate_identifier,
+        # Marketing
+        "instagram_username":         req.instagram_username,
+        "tiktok_username":            req.tiktok_username,
+        "meta_ad_page":               req.meta_ad_page,
+        "similarweb_domain":          req.similarweb_domain,
+        # HR
+        "shrm_identifier":            req.shrm_identifier,
+        "cipd_identifier":            req.cipd_identifier,
+        "glassdoor_employer":         req.glassdoor_employer,
+        "company_identifier":         req.company_identifier,
+        # Design
+        "behance_username":           req.behance_username,
+        "dribbble_username":          req.dribbble_username,
+        # Finance
+        "finance_license_identifier": req.finance_license_identifier,
     }
 
     result = evaluate_candidate(
@@ -240,17 +288,14 @@ async def evaluate(req: EvaluateRequest):
     dimensions = {k: scores.get(k, 0) for k in dim_keys}
     reasoning  = scores.get("reasoning", {})
 
-    # Extract source URLs
-    source_urls = {
-        "github":         sources.get("github",         {}).get("profile_url"),
-        "linkedin":       sources.get("linkedin",       {}).get("profile_url"),
-        "google_scholar": sources.get("google_scholar", {}).get("profile_url"),
-        "researchgate":   sources.get("researchgate",   {}).get("profile_url"),
-        "kaggle":         sources.get("kaggle",         {}).get("profile_url"),
-        "devto":          sources.get("devto",          {}).get("profile_url"),
-        "medium":         sources.get("medium",         {}).get("profile_url"),
-        "hashnode":       sources.get("hashnode",       {}).get("profile_url"),
-    }
+    # Extract source URLs — dynamic, covers all role-based platforms
+    _all_source_keys = [
+        "github","linkedin","google_scholar","researchgate","kaggle","devto","medium","hashnode",
+        "instagram","tiktok","meta_ad_library","similarweb",
+        "shrm","cipd","glassdoor","ssm_acra","sc_mq",
+        "behance","dribbble",
+    ]
+    source_urls = {k: sources.get(k, {}).get("profile_url") for k in _all_source_keys}
 
     source_details = {
         key: {

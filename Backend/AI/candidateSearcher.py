@@ -1155,67 +1155,360 @@ def search_hashnode(name: str, keywords: list, identifier: str = None) -> dict:
 
 
 
-# ──────────────────────────────────────────────────────────
-# REQUIREMENT MATCHING
-# ──────────────────────────────────────────────────────────
-def compute_match(requirements: list, sources: dict) -> list:
-    report = []
-    for req in requirements:
-        req_words = [w for w in re.split(r"[\s,/+()\-]+", req.lower())
-                     if len(w) > 2]
-        evidence = {}
-        for src, data in sources.items():
-            hits = data.get("keyword_hits", {})
-            found = any(
-                any(rw in k.lower() for rw in req_words)
-                for k, v in hits.items() if v
-            )
-            evidence[src] = found
+# ══════════════════════════════════════════════════════════
+# MARKETING PLATFORMS
+# ══════════════════════════════════════════════════════════
 
-        report.append({
-            "requirement":           req,
-            "fulfilled":             any(evidence.values()),
-            "evidence":              evidence,
-            "sources_with_evidence": [s for s, v in evidence.items() if v],
-        })
-    return report
+def search_instagram(name: str, keywords: list, identifier: str = None) -> dict:
+    """Public Instagram profile scrape — followers, posts, bio via meta tags."""
+    out = {
+        "profile_url": None, "keyword_hits": {}, "summary": "Not found",
+        "followers": None, "following": None, "posts": None,
+        "bio": "", "username": None,
+    }
+    handle = parse_identifier(identifier, "instagram") if identifier else None
+    if not handle:
+        print("\n[Instagram] No identifier — deep search by name...")
+        for query in [f'site:instagram.com "{name}"', f'instagram.com {name} profile']:
+            results = search_web_snippets(query)
+            for r in results:
+                if "instagram.com/" in r["url"] and "/p/" not in r["url"]:
+                    m_slug = re.search(r"instagram\.com/([A-Za-z0-9_.]+)/?", r["url"])
+                    if m_slug:
+                        handle = m_slug.group(1)
+                        out.setdefault("possible_profiles", []).append(r["url"])
+                        print(f"    -> Found: {r['url']} — deep scraping")
+                        break
+            if handle:
+                break
+            time.sleep(DELAY)
+        if not handle:
+            out["summary"] = "No Instagram profile found via deep search"
+            return out
+    url = f"https://www.instagram.com/{handle}/"
+    out.update({"profile_url": url, "username": handle})
+    r = safe_get(url)
+    all_text = ""
+    if r and r.status_code == 200:
+        soup = BeautifulSoup(r.text, "html.parser")
+        meta_desc = next((t.get("content","") for t in soup.find_all("meta") if t.get("name")=="description" or t.get("property")=="og:description"), "")
+        fol = re.search(r"([\d,.]+[KkMm]?)\s+Followers?", meta_desc)
+        pst = re.search(r"([\d,.]+[KkMm]?)\s+Posts?", meta_desc)
+        if fol: out["followers"] = fol.group(1)
+        if pst: out["posts"] = pst.group(1)
+        all_text = meta_desc
+    else:
+        snippets = search_web_snippets(f'site:instagram.com/{handle}')
+        all_text = " ".join(s["snippet"] for s in snippets[:3])
+        fol = re.search(r"([\d,.]+[KkMm]?)\s+Followers?", all_text, re.I)
+        if fol: out["followers"] = fol.group(1)
+    out["keyword_hits"] = kw_score(all_text, keywords)
+    m = matched(out["keyword_hits"])
+    out["summary"] = f"Profile found. Followers: {out['followers'] or 'N/A'}, Posts: {out['posts'] or 'N/A'}. {len(m)}/{len(keywords)} keywords matched."
+    print(f"  -> {url}")
+    return out
 
 
-# ──────────────────────────────────────────────────────────
-# SAVE
-# ──────────────────────────────────────────────────────────
-def save(candidate: str, sources: dict, req_report: list):
-    ts        = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_name = re.sub(r"[^a-z0-9]", "_", candidate.lower())
+def search_tiktok(name: str, keywords: list, identifier: str = None) -> dict:
+    """Public TikTok profile — followers, likes via meta tags or web snippets."""
+    out = {
+        "profile_url": None, "keyword_hits": {}, "summary": "Not found",
+        "followers": None, "likes": None, "username": None,
+    }
+    handle = parse_identifier(identifier, "tiktok") if identifier else None
+    if not handle:
+        print("\n[TikTok] No identifier — deep search by name...")
+        for query in [f'site:tiktok.com "@" "{name}"', f'tiktok.com {name}']:
+            results = search_web_snippets(query)
+            for r in results:
+                if "tiktok.com/@" in r["url"]:
+                    m_slug = re.search(r"tiktok\.com/@([A-Za-z0-9_.]+)", r["url"])
+                    if m_slug:
+                        handle = m_slug.group(1)
+                        out.setdefault("possible_profiles", []).append(r["url"])
+                        print(f"    -> Found: {r['url']} — deep scraping")
+                        break
+            if handle:
+                break
+            time.sleep(DELAY)
+        if not handle:
+            out["summary"] = "No TikTok profile found via deep search"
+            return out
+    url = f"https://www.tiktok.com/@{handle}"
+    out.update({"profile_url": url, "username": handle})
+    r = safe_get(url)
+    page_txt = ""
+    if r and r.status_code == 200:
+        soup = BeautifulSoup(r.text, "html.parser")
+        meta_desc = next((t.get("content","") for t in soup.find_all("meta") if t.get("property")=="og:description"), "")
+        page_txt = meta_desc or soup.get_text(" ", strip=True)[:2000]
+    else:
+        snippets = search_web_snippets(f'tiktok.com/@{handle} followers')
+        page_txt = " ".join(s["snippet"] for s in snippets[:3])
+    fol = re.search(r"([\d,.]+[KkMm]?)\s+Followers?", page_txt, re.I)
+    lk  = re.search(r"([\d,.]+[KkMm]?)\s+Likes?", page_txt, re.I)
+    if fol: out["followers"] = fol.group(1)
+    if lk:  out["likes"] = lk.group(1)
+    out["keyword_hits"] = kw_score(page_txt, keywords)
+    m = matched(out["keyword_hits"])
+    out["summary"] = f"Profile found. Followers: {out['followers'] or 'N/A'}, Likes: {out['likes'] or 'N/A'}. {len(m)}/{len(keywords)} keywords matched."
+    print(f"  -> {url}")
+    return out
 
-    json_path = f"candidate_{safe_name}_{ts}.json"
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump({
-            "candidate":         candidate,
-            "searched_at":       ts,
-            "sources":           sources,
-            "requirement_report": req_report,
-        }, f, indent=2, ensure_ascii=False)
-    print(f"\n✅ JSON saved: {json_path}")
 
-    csv_path = f"candidate_{safe_name}_{ts}.csv"
-    src_keys = list(sources.keys())
-    with open(csv_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["requirement", "fulfilled"] + src_keys)
-        writer.writeheader()
-        for row in req_report:
-            r = {"requirement": row["requirement"], "fulfilled": row["fulfilled"]}
-            for s in src_keys:
-                r[s] = row["evidence"].get(s, False)
-            writer.writerow(r)
-    print(f"✅ CSV saved: {csv_path}")
+def search_meta_ad_library(name: str, keywords: list, identifier: str = None) -> dict:
+    """Checks Meta Ad Library for active ads run by or for the candidate's employer."""
+    out = {
+        "profile_url": None, "keyword_hits": {}, "summary": "Not found",
+        "active_ads": None, "advertiser": None,
+    }
+    query_name = identifier.strip() if identifier else name
+    search_url = f"https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&q={quote_plus(query_name)}&search_type=keyword_unordered"
+    out["profile_url"] = search_url
+    print(f"\n[Meta Ad Library] Searching for '{query_name}' ...")
+    snippets = search_web_snippets(f'"{name}" facebook ads OR instagram ads campaign')
+    all_text = " ".join(f"{s['title']} {s['snippet']}" for s in snippets[:5])
+    ad_m = re.search(r"(\d+)\s+(?:active\s+)?ads?", all_text, re.I)
+    if ad_m:
+        out["active_ads"] = int(ad_m.group(1))
+        out["advertiser"] = query_name
+    out["keyword_hits"] = kw_score(all_text, keywords)
+    m = matched(out["keyword_hits"])
+    out["summary"] = f"Ad Library search for '{query_name}'. Active ads: {out['active_ads'] or 'unknown'}. {len(m)}/{len(keywords)} keywords matched."
+    print(f"  -> {search_url}")
+    return out
 
-    return json_path, csv_path
+
+def search_similarweb(name: str, keywords: list, identifier: str = None) -> dict:
+    """Checks Similarweb traffic data for the candidate's employer domain."""
+    out = {
+        "profile_url": None, "keyword_hits": {}, "summary": "Not found",
+        "domain": None, "traffic_trend": None,
+    }
+    domain = identifier.strip() if identifier else None
+    if not domain:
+        results = search_web_snippets(f'"{name}" company site OR domain')
+        for r in results[:3]:
+            dm = re.search(r'(?:at|@|for)\s+([a-z0-9\-]+\.[a-z]{2,})', r.get("snippet",""), re.I)
+            if dm:
+                domain = dm.group(1)
+                break
+    if not domain:
+        out["summary"] = "No domain identified for Similarweb lookup"
+        return out
+    sw_url = f"https://www.similarweb.com/website/{domain}/"
+    out.update({"profile_url": sw_url, "domain": domain})
+    print(f"\n[Similarweb] Looking up domain '{domain}' ...")
+    snippets = search_web_snippets(f'site:similarweb.com {domain} traffic')
+    all_text = " ".join(f"{s['title']} {s['snippet']}" for s in snippets[:3])
+    trend_m = re.search(r"([\d,.]+[KkMm]?)\s+(?:monthly\s+)?(?:visits?|traffic)", all_text, re.I)
+    if trend_m: out["traffic_trend"] = f"{trend_m.group(1)} monthly visits"
+    out["keyword_hits"] = kw_score(all_text, keywords)
+    m = matched(out["keyword_hits"])
+    out["summary"] = f"Similarweb for {domain}. Traffic: {out['traffic_trend'] or 'not found'}. {len(m)}/{len(keywords)} keywords matched."
+    print(f"  -> {sw_url}")
+    return out
+
+
+# ══════════════════════════════════════════════════════════
+# HR PLATFORMS
+# ══════════════════════════════════════════════════════════
+
+def search_shrm(name: str, keywords: list, identifier: str = None) -> dict:
+    """Searches SHRM certification registry for SHRM-CP / SHRM-SCP credentials."""
+    out = {
+        "profile_url": "https://www.shrm.org/certification/Pages/verify-certification.aspx",
+        "keyword_hits": {}, "summary": "Not found",
+        "certification": None, "verified": False,
+    }
+    query = identifier or name
+    print(f"\n[SHRM] Searching certification for '{query}' ...")
+    results = search_web_snippets(f'SHRM certified "{query}" SHRM-CP OR SHRM-SCP')
+    all_text = " ".join(f"{r['title']} {r['snippet']}" for r in results[:5])
+    cert_m = re.search(r"(SHRM-CP|SHRM-SCP|SHRM\s+Senior|SHRM\s+Certified)", all_text, re.I)
+    if cert_m:
+        out["certification"] = cert_m.group(1).upper()
+        out["verified"] = True
+    out["keyword_hits"] = kw_score(all_text, keywords)
+    m = matched(out["keyword_hits"])
+    out["summary"] = f"SHRM search for '{query}'. Cert: {out['certification'] or 'not found'}. Verified: {out['verified']}. {len(m)}/{len(keywords)} keywords matched."
+    return out
+
+
+def search_cipd(name: str, keywords: list, identifier: str = None) -> dict:
+    """Searches CIPD membership registry for Associate/Chartered/Fellow status."""
+    out = {
+        "profile_url": "https://www.cipd.org/en/members/find-a-member/",
+        "keyword_hits": {}, "summary": "Not found",
+        "membership_grade": None, "verified": False,
+    }
+    query = identifier or name
+    print(f"\n[CIPD] Searching membership for '{query}' ...")
+    results = search_web_snippets(f'CIPD member "{query}" Assoc OR Chartered OR Fellow HR')
+    all_text = " ".join(f"{r['title']} {r['snippet']}" for r in results[:5])
+    grade_m = re.search(r"(Assoc\s*CIPD|Chartered\s+CIPD|CIPD\s+Fellow|FCIPD|MCIPD)", all_text, re.I)
+    if grade_m:
+        out["membership_grade"] = grade_m.group(1)
+        out["verified"] = True
+    out["keyword_hits"] = kw_score(all_text, keywords)
+    m = matched(out["keyword_hits"])
+    out["summary"] = f"CIPD search for '{query}'. Grade: {out['membership_grade'] or 'not found'}. {len(m)}/{len(keywords)} keywords matched."
+    return out
+
+
+def search_glassdoor_employer(name: str, keywords: list, identifier: str = None) -> dict:
+    """Checks Glassdoor employer reviews/ratings for companies the candidate worked at."""
+    out = {
+        "profile_url": None, "keyword_hits": {}, "summary": "Not found",
+        "employer": None, "rating": None, "review_count": None,
+    }
+    employer = identifier or name
+    print(f"\n[Glassdoor] Employer review search for '{employer}' ...")
+    results = search_web_snippets(f'site:glassdoor.com "{employer}" reviews rating')
+    all_text = " ".join(f"{r['title']} {r['snippet']}" for r in results[:5])
+    for r in results[:3]:
+        if "glassdoor.com" in r["url"] and not out["profile_url"]:
+            out["profile_url"] = r["url"]
+            out["employer"] = employer
+    rating_m = re.search(r"(\d\.\d)\s*(?:out of 5|stars?|rating)", all_text, re.I)
+    rev_m    = re.search(r"([\d,]+)\s+reviews?", all_text, re.I)
+    if rating_m: out["rating"] = rating_m.group(1)
+    if rev_m:    out["review_count"] = rev_m.group(1)
+    out["keyword_hits"] = kw_score(all_text, keywords)
+    m = matched(out["keyword_hits"])
+    out["summary"] = f"Glassdoor for '{employer}'. Rating: {out['rating'] or 'N/A'}/5, Reviews: {out['review_count'] or 'N/A'}. {len(m)}/{len(keywords)} keywords matched."
+    return out
+
+
+def search_ssm_acra(name: str, keywords: list, identifier: str = None) -> dict:
+    """Checks SSM (Malaysia) or ACRA (Singapore) for employer company legitimacy."""
+    out = {
+        "profile_url": None, "keyword_hits": {}, "summary": "Not found",
+        "company": None, "status": None, "jurisdiction": None,
+    }
+    company = identifier or name
+    print(f"\n[SSM/ACRA] Company registration check for '{company}' ...")
+    ssm  = search_web_snippets(f'SSM Malaysia "{company}" registered')
+    acra = search_web_snippets(f'ACRA Singapore "{company}" registered')
+    all_text = " ".join(f"{r['title']} {r['snippet']}" for r in (ssm+acra)[:6])
+    if ssm:
+        out.update({"jurisdiction": "Malaysia (SSM)", "profile_url": "https://www.ssm.com.my/Pages/Quick_Link/e-Search.aspx"})
+    elif acra:
+        out.update({"jurisdiction": "Singapore (ACRA)", "profile_url": "https://www.bizfile.gov.sg"})
+    status_m = re.search(r"(live|registered|active|dissolved|struck\s+off|de-registered)", all_text, re.I)
+    if status_m:
+        out["status"] = status_m.group(1).capitalize()
+        out["company"] = company
+    out["keyword_hits"] = kw_score(all_text, keywords)
+    m = matched(out["keyword_hits"])
+    out["summary"] = f"Company check for '{company}' ({out['jurisdiction'] or 'MY/SG'}). Status: {out['status'] or 'unknown'}. {len(m)}/{len(keywords)} keywords matched."
+    return out
+
+
+# ══════════════════════════════════════════════════════════
+# DESIGN PLATFORMS
+# ══════════════════════════════════════════════════════════
+
+def search_behance(name: str, keywords: list, identifier: str = None) -> dict:
+    """Searches Behance design portfolio for projects and appreciations."""
+    out = {
+        "profile_url": None, "keyword_hits": {}, "summary": "Not found",
+        "projects": None, "appreciations": None,
+    }
+    handle = identifier or None
+    if not handle:
+        print(f"\n[Behance] Deep search for '{name}' ...")
+        for r in search_web_snippets(f'site:behance.net "{name}"'):
+            if "behance.net/" in r["url"]:
+                m_slug = re.search(r"behance\.net/([A-Za-z0-9_.\-]+)", r["url"])
+                if m_slug:
+                    handle = m_slug.group(1)
+                    print(f"    -> Found: {r['url']}")
+                    break
+    if not handle:
+        out["summary"] = "No Behance profile found"
+        return out
+    url = f"https://www.behance.net/{handle}"
+    out["profile_url"] = url
+    r = safe_get(url)
+    page_txt = r.text if r and r.status_code == 200 else " ".join(s["snippet"] for s in search_web_snippets(f'behance.net/{handle}')[:3])
+    proj_m = re.search(r"(\d+)\s+Projects?", page_txt, re.I)
+    appr_m = re.search(r"([\d,]+)\s+Appreciations?", page_txt, re.I)
+    if proj_m: out["projects"] = int(proj_m.group(1))
+    if appr_m: out["appreciations"] = appr_m.group(1)
+    out["keyword_hits"] = kw_score(page_txt, keywords)
+    m = matched(out["keyword_hits"])
+    out["summary"] = f"Profile found. Projects: {out['projects'] or 'N/A'}, Appreciations: {out['appreciations'] or 'N/A'}. {len(m)}/{len(keywords)} keywords matched."
+    print(f"  -> {url}")
+    return out
+
+
+def search_dribbble(name: str, keywords: list, identifier: str = None) -> dict:
+    """Searches Dribbble for design shots and follower count."""
+    out = {
+        "profile_url": None, "keyword_hits": {}, "summary": "Not found",
+        "shots": None, "followers": None,
+    }
+    handle = identifier or None
+    if not handle:
+        print(f"\n[Dribbble] Deep search for '{name}' ...")
+        for r in search_web_snippets(f'site:dribbble.com "{name}"'):
+            if "dribbble.com/" in r["url"] and "/shots/" not in r["url"]:
+                m_slug = re.search(r"dribbble\.com/([A-Za-z0-9_.\-]+)", r["url"])
+                if m_slug:
+                    handle = m_slug.group(1)
+                    print(f"    -> Found: {r['url']}")
+                    break
+    if not handle:
+        out["summary"] = "No Dribbble profile found"
+        return out
+    url = f"https://dribbble.com/{handle}"
+    out["profile_url"] = url
+    snippets = search_web_snippets(f'dribbble.com/{handle} shots followers')
+    page_txt = " ".join(s["snippet"] for s in snippets[:3])
+    fol_m  = re.search(r"([\d,]+)\s+Followers?", page_txt, re.I)
+    shot_m = re.search(r"(\d+)\s+Shots?", page_txt, re.I)
+    if fol_m:  out["followers"] = fol_m.group(1)
+    if shot_m: out["shots"] = int(shot_m.group(1))
+    out["keyword_hits"] = kw_score(page_txt, keywords)
+    m = matched(out["keyword_hits"])
+    out["summary"] = f"Profile found. Shots: {out['shots'] or 'N/A'}, Followers: {out['followers'] or 'N/A'}. {len(m)}/{len(keywords)} keywords matched."
+    print(f"  -> {url}")
+    return out
 
 
 # ──────────────────────────────────────────────────────────
 # MAIN
 # ──────────────────────────────────────────────────────────
+
+def search_sc_mq(name: str, keywords: list, identifier: str = None) -> dict:
+    """Searches SC Malaysia / finance license registries for CFA/ACCA/SIDC credentials."""
+    out = {
+        "profile_url": "https://www.sc.com.my/regulation/guidelines/licensing",
+        "keyword_hits": {}, "summary": "Not found",
+        "license": None, "verified": False,
+    }
+    query = identifier or name
+    print(f"\n[SC/Finance Registry] Searching license for '{query}' ...")
+    results = search_web_snippets(
+        f'"{query}" licensed dealer OR "capital markets" OR SIDC OR FIMM OR CFA OR ACCA Malaysia'
+    )
+    all_text = " ".join(f"{r['title']} {r['snippet']}" for r in results[:5])
+    lic_m = re.search(r"(CFA|ACCA|CIMA|CFPCM|SIDC|FIMM|licensed\s+dealer|fund\s+manager)", all_text, re.I)
+    if lic_m:
+        out["license"] = lic_m.group(1)
+        out["verified"] = True
+    out["keyword_hits"] = kw_score(all_text, keywords)
+    m = matched(out["keyword_hits"])
+    out["summary"] = (
+        f"Finance license search for '{query}'. "
+        f"License/cert found: {out['license'] or 'none detected'}. "
+        f"{len(m)}/{len(keywords)} keywords matched."
+    )
+    print(f"  -> {out['profile_url']}")
+    return out
+
+
 STOP = {"and","or","the","of","in","with","to","a","an","is","are","has",
         "have","years","experience","knowledge","ability","skills","strong",
         "good","proficient","familiar","understanding","working","using","able"}

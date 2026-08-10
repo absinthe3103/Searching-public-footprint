@@ -1,6 +1,8 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## Getting Started
+## Getting Started Frontedn
+cd .\Searching-public-footprint\
+cd .\Frontend\
 
 First, run the development server:
 
@@ -19,9 +21,27 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+______________________________________________________________________________________________
+## Getting Started Backend
+cd Searching-public-footprint/Backend/src
+
+# First time only — install dependencies
+pip install -r requirements.txt
+
+## stay at backend
+cd ..
+
+# Start the API (allow the same network device to access the localhost)
+uvicorn src.Logic:app --reload --host 0.0.0.0 --port 8000
 
 ## Running the backend
-uvicorn logic:app --reload --port 8000
+uvicorn src.Logic:app --reload --port 8000
+________________________________________________________________________________________________
+
+## Run Ollama
+ollama pull qwen2.5:14b
+
+________________________________________________________________________________________________
 
 ## Testing Program
 
