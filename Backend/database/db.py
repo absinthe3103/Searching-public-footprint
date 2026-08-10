@@ -6,6 +6,7 @@ scores using SQLite (no more single "rescoring_score" column).
 
 import sqlite3
 import os
+import uuid
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "candidates.db")
 
@@ -54,7 +55,6 @@ def init_db():
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
                 name           TEXT    NOT NULL,
                 original_role  TEXT,
-                original_tier  TEXT,
                 fit_direction  TEXT,
                 whats_changed_summary TEXT,
                 re_engage_flag BOOLEAN,
@@ -68,17 +68,17 @@ def init_db():
 
 
 def insert_candidate(name: str, dimensions: dict, usernames: dict | None = None,
-                     original_role: str = "", original_tier: str = "",
+                     original_role: str = "",
                      fit_direction: str = "", whats_changed_summary: str = "",
                      re_engage_flag: bool = False, status: str = "") -> int:
     """
-    Insert a candidate and return the new row id.
+    Insert a candidate and return their auto-incremented id.
     """
     usernames = usernames or {}
 
-    columns = ["name", "original_role", "original_tier", "fit_direction", "whats_changed_summary", "re_engage_flag", "status"] + USERNAME_COLUMNS + DIMENSION_COLUMNS
+    columns = ["name", "original_role", "fit_direction", "whats_changed_summary", "re_engage_flag", "status"] + USERNAME_COLUMNS + DIMENSION_COLUMNS
     values = (
-        [name, original_role, original_tier, fit_direction, whats_changed_summary, re_engage_flag, status]
+        [name, original_role, fit_direction, whats_changed_summary, re_engage_flag, status]
         + [usernames.get(col) for col in USERNAME_COLUMNS]
         + [dimensions.get(col, 0) for col in DIMENSION_COLUMNS]
     )
@@ -92,6 +92,38 @@ def insert_candidate(name: str, dimensions: dict, usernames: dict | None = None,
         )
         conn.commit()
         return cursor.lastrowid
+
+def update_candidate(candidate_id: int, dimensions: dict, usernames: dict | None = None,
+                     fit_direction: str = "", whats_changed_summary: str = "",
+                     re_engage_flag: bool = False, status: str = "") -> bool:
+    """
+    Update an existing candidate's evaluation data.
+    """
+    usernames = usernames or {}
+    
+    set_fields = ["fit_direction = ?", "whats_changed_summary = ?", "re_engage_flag = ?", "status = ?"]
+    values = [fit_direction, whats_changed_summary, re_engage_flag, status]
+    
+    for col in USERNAME_COLUMNS:
+        if col in usernames:
+            set_fields.append(f"{col} = ?")
+            values.append(usernames[col])
+            
+    for col in DIMENSION_COLUMNS:
+        if col in dimensions:
+            set_fields.append(f"{col} = ?")
+            values.append(dimensions[col])
+            
+    set_clause = ", ".join(set_fields)
+    values.append(candidate_id)
+    
+    with get_connection() as conn:
+        cursor = conn.execute(
+            f"UPDATE candidates SET {set_clause}, created_at = CURRENT_TIMESTAMP WHERE id = ?",
+            values,
+        )
+        conn.commit()
+        return cursor.rowcount > 0
 
 
 def get_all_candidates() -> list:

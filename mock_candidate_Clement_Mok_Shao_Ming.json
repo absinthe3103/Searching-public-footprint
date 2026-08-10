@@ -1,0 +1,48 @@
+{
+  "candidate_name": "Clement Mok Shao Ming",
+  "identifiers": {
+    "github": null,
+    "linkedin": null,
+    "google_scholar": null,
+    "researchgate": null,
+    "kaggle": null,
+    "devto": null,
+    "medium": null,
+    "hashnode": null
+  },
+  "keywords": [
+    "machine",
+    "learning",
+    "python",
+    "deep",
+    "published",
+    "research"
+  ],
+  "timestamp": "2026-07-28T09:21:47.407636",
+  "sources": {
+    "github": {
+      "status": "mocked"
+    },
+    "linkedin": {
+      "status": "mocked"
+    },
+    "google_scholar": {
+      "status": "mocked"
+    },
+    "researchgate": {
+      "status": "mocked"
+    },
+    "kaggle": {
+      "status": "mocked"
+    },
+    "devto": {
+      "status": "mocked"
+    },
+    "medium": {
+      "status": "mocked"
+    },
+    "hashnode": {
+      "status": "mocked"
+    }
+  }
+}

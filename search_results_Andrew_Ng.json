@@ -1,0 +1,104 @@
+{
+  "candidate_name": "Andrew Ng",
+  "identifiers": {
+    "github": null,
+    "linkedin": null,
+    "google_scholar": null,
+    "researchgate": null,
+    "kaggle": null,
+    "devto": null,
+    "medium": null,
+    "hashnode": null
+  },
+  "keywords": [
+    "machine",
+    "learning",
+    "deep"
+  ],
+  "timestamp": "2026-07-28T09:24:07.821050",
+  "results": [
+    {
+      "key": "github",
+      "ok": false,
+      "found": false,
+      "elapsed": 11.27,
+      "missing": [
+        "profile_url",
+        "repos",
+        "top_languages",
+        "latest_push",
+        "public_repos",
+        "followers"
+      ]
+    },
+    {
+      "key": "linkedin",
+      "ok": false,
+      "found": false,
+      "elapsed": 13.08,
+      "missing": [
+        "profile_url",
+        "current_role",
+        "company"
+      ]
+    },
+    {
+      "key": "google_scholar",
+      "ok": false,
+      "found": false,
+      "elapsed": 6.03,
+      "missing": [
+        "profile_url",
+        "publications",
+        "citations",
+        "interests"
+      ]
+    },
+    {
+      "key": "researchgate",
+      "ok": false,
+      "found": false,
+      "elapsed": 31.31,
+      "missing": [
+        "profile_url"
+      ]
+    },
+    {
+      "key": "kaggle",
+      "ok": false,
+      "found": false,
+      "elapsed": 15.78,
+      "missing": [
+        "profile_url"
+      ]
+    },
+    {
+      "key": "devto",
+      "ok": false,
+      "found": false,
+      "elapsed": 11.24,
+      "missing": [
+        "profile_url",
+        "articles"
+      ]
+    },
+    {
+      "key": "medium",
+      "ok": false,
+      "found": false,
+      "elapsed": 16.45,
+      "missing": [
+        "profile_url"
+      ]
+    },
+    {
+      "key": "hashnode",
+      "ok": false,
+      "found": false,
+      "elapsed": 10.95,
+      "missing": [
+        "profile_url"
+      ]
+    }
+  ]
+}

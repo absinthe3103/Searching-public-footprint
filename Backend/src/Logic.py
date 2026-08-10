@@ -63,7 +63,7 @@ class EvaluateRequest(BaseModel):
     candidate_name:   str
     job_requirements: list[str]
     original_role:    str | None = None
-    original_tier:    str | None = None
+    candidate_id:     int | None = None
     backend:          str = "gemini"   # updated to gemini
 
     # Optional exact usernames/URLs for each platform
@@ -81,7 +81,6 @@ class EvaluateRequest(BaseModel):
             "example": {
                 "candidate_name":   "Andrew Ng",
                 "original_role":    "Senior Research Scientist",
-                "original_tier":    "Tier 1",
                 "job_requirements": [
                     "Machine Learning",
                     "Python",
@@ -121,7 +120,6 @@ class SourceURLs(BaseModel):
 class EvaluateResponse(BaseModel):
     candidate_name:  str
     original_role:   str | None
-    original_tier:   str | None
     rescoring_score: float
     dimensions:      DimensionScores
     reasoning:       dict
@@ -135,14 +133,17 @@ class EvaluateResponse(BaseModel):
     whats_changed_summary: str
     re_engage_flag:        bool
     status:                str
+    ai_summary:            str | None = None
+    top_strengths:         list[str] = []
+    top_weaknesses:        list[str] = []
     possible_profiles:     dict[str, list[str]] = {}
+    lifestyle_socials:     dict[str, str] = {}
 
 
 class CandidateRow(BaseModel):
     id:   int
     name: str
     original_role:   str | None = None
-    original_tier:   str | None = None
 
     # Source usernames
     github_username:   str | None = None
@@ -218,7 +219,7 @@ async def evaluate(req: EvaluateRequest):
         backend=req.backend,
         usernames=usernames,
         original_role=req.original_role,
-        original_tier=req.original_tier,
+        candidate_id=req.candidate_id,
     )
 
     # result is None only if backend name was invalid or a fatal error occurred
@@ -282,7 +283,6 @@ async def evaluate(req: EvaluateRequest):
     return EvaluateResponse(
         candidate_name=req.candidate_name,
         original_role=req.original_role,
-        original_tier=req.original_tier,
         rescoring_score=result["rescoring_score"],
         dimensions=DimensionScores(**dimensions),
         reasoning=reasoning,
@@ -294,6 +294,9 @@ async def evaluate(req: EvaluateRequest):
         whats_changed_summary=scores.get("whats_changed_summary"),
         re_engage_flag=scores.get("re_engage_flag"),
         status=scores.get("status"),
+        ai_summary=scores.get("ai_summary"),
+        top_strengths=scores.get("top_strengths", []),
+        top_weaknesses=scores.get("top_weaknesses", []),
         possible_profiles=possible_profiles,
     )
 

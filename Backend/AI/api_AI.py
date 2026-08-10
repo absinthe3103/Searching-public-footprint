@@ -45,7 +45,7 @@ _BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(_BACKEND, "database"))
 sys.path.insert(0, os.path.join(_BACKEND, "src"))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from db import insert_candidate, get_all_candidates
+from db import insert_candidate, get_all_candidates, get_candidate_by_id, update_candidate
 
 # ── OpenRouter API ───────────────────────────────────────
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -105,17 +105,28 @@ class CandidateEvaluation(BaseModel):
     whats_changed_summary: str = Field(description="A plain-language explanation of what changed in their public footprint")
     re_engage_flag: bool = Field(description="True if it is a good time to re-engage, False otherwise")
     status: str = Field(description="One of: 'Active opportunity', 'Re-engage', 'Watch', 'Faded'")
+    ai_summary: str = Field(description="A 2-3 paragraph natural language summary based on retrieved information, assessing their fit for the position (culture, workforce, tech skills, language, collaboration).")
+    top_strengths: list[str] = Field(description="Exactly 3 key strengths of this candidate.")
+    top_weaknesses: list[str] = Field(description="Exactly 3 key weaknesses or concerns for this candidate.")
 
+class LifestyleSocials(BaseModel):
+    facebook: str = Field(description="URL to Facebook profile, or 'no account found'")
+    instagram: str = Field(description="URL to Instagram profile, or 'no account found'")
 SCORING_SYSTEM_PROMPT = """
 You are the HINT Master Persona, an expert AI hiring evaluator. You will receive a candidate's public profile data
 collected from GitHub, LinkedIn, Google Scholar, ResearchGate, Kaggle, Dev.to, Medium,
-and Hashnode, along with the job requirements and their original role/tier.
+and Hashnode, along with the job requirements and their original role.
 
 Evaluate the candidate across exactly the 9 dimensions (score 0-100).
 Role domain relevance is the PRIMARY signal.
 
-Additionally, provide candidate re-scoring (fit_direction, whats_changed_summary, re_engage_flag) 
-and determine their talent radar status (Active opportunity, Re-engage, Watch, Faded) based on their signals.
+If a RUBRIC is provided, you MUST strictly follow its scoring baselines for the relevant dimensions.
+If HISTORICAL DATA is provided, compare the current data against the history to accurately determine `fit_direction`, `whats_changed_summary`, and `re_engage_flag`.
+Otherwise, evaluate these based on their current standing.
+
+Additionally, determine their talent radar status (Active opportunity, Re-engage, Watch, Faded) based on their signals.
+Finally, provide a 2-3 paragraph `ai_summary` assessing their fit for the position, covering culture, workforce, tech skills, language, and collaborative potential based on the provided footprint data.
+Also extract EXACTLY 3 key strengths into `top_strengths` and 3 weaknesses/concerns into `top_weaknesses`.
 """
 
 
@@ -176,7 +187,9 @@ def collect_candidate_data(candidate_name: str, requirements: list[str],
 # ──────────────────────────────────────────────────────────
 def build_prompt(candidate_name: str, requirements: list[str],
                  sources: dict, kws: list[str], 
-                 original_role: str = "", original_tier: str = "") -> str:
+                 original_role: str = "",
+                 rubric: dict | None = None,
+                 history: dict | None = None) -> str:
 
     def src_summary(key: str) -> str:
         d = sources.get(key, {})
@@ -210,12 +223,15 @@ def build_prompt(candidate_name: str, requirements: list[str],
     prompt = f"""
 CANDIDATE: {candidate_name}
 ORIGINAL ROLE: {original_role or 'Unknown'}
-ORIGINAL TIER: {original_tier or 'Unknown'}
 
 JOB REQUIREMENTS:
 {chr(10).join(f"- {r}" for r in requirements)}
 
 EXTRACTED KEYWORDS: {kws}
+
+{'RUBRIC FOR ' + original_role + ':' + chr(10) + json.dumps(rubric, indent=2) if rubric else ''}
+
+{'HISTORICAL DATA (Last Evaluation):' + chr(10) + json.dumps({k:v for k,v in history.items() if k not in ['id', 'created_at', 'hint_id']}, indent=2) if history else ''}
 
 PUBLIC PROFILE DATA:
 
@@ -274,16 +290,33 @@ def call_gemini(prompt: str) -> dict:
             ),
         )
         return json.loads(response.text)
-
     except Exception as e:
-        print(f"  ⚠ Gemini API error: {e}")
+        print(f"  ⚠ Gemini Call Failed: {e}")
         return {}
+
+
+def search_lifestyle_socials(candidate_name: str, requirements: list[str]) -> dict:
+    """Uses DuckDuckGo to find lifestyle social media accounts."""
+    print(f"\n{'═'*60}")
+    print(f"  STEP X — Searching for Lifestyle Socials (FB/IG)")
+    print(f"{'═'*60}")
+    
+    from candidateSearcher import find_profile_url_via_ddg
+    
+    facebook_url = find_profile_url_via_ddg(candidate_name, "facebook", requirements)
+    instagram_url = find_profile_url_via_ddg(candidate_name, "instagram", requirements)
+    
+    return {
+        "facebook": facebook_url if facebook_url else "no account found",
+        "instagram": instagram_url if instagram_url else "no account found"
+    }
 
 
 def evaluate_candidate(candidate_name: str, requirements: list[str],
                        backend: str = "gemini",
                        usernames: dict | None = None,
-                       original_role: str = "", original_tier: str = "") -> dict | None:
+                       original_role: str = "",
+                       candidate_id: int | None = None) -> dict | None:
     """
     Run the full extraction -> prompt generation -> Gemini scoring pipeline.
     Returns a dict with dimensions, final score, reasoning, sources, and DB ID.
@@ -301,10 +334,34 @@ def evaluate_candidate(candidate_name: str, requirements: list[str],
         print("⚠ No profiles found across any platform. Aborting.")
         return None
 
-    # 2. Build prompt
-    prompt = build_prompt(candidate_name, requirements, sources, kws, original_role, original_tier)
+    # 2. Load Rubric and History
+    rubric = None
+    try:
+        rubric_path = os.path.join(os.path.dirname(__file__), 'rubrics.json')
+        if os.path.exists(rubric_path):
+            with open(rubric_path, 'r') as f:
+                rubrics_data = json.load(f)
+                
+                # Support both flat and nested JSON structures
+                rubric_dict = rubrics_data.get("rubric", rubrics_data) if isinstance(rubrics_data, dict) else {}
+                
+                # Fuzzy matching for roles (e.g. "Backend Engineer" -> "Back-end Developer")
+                search_role = original_role.lower().replace("-", "").replace(" ", "")
+                for key, val in rubric_dict.items():
+                    key_clean = key.lower().replace("-", "").replace(" ", "")
+                    # If 'backend' is in both, or they match exactly
+                    if key_clean == search_role or (search_role and (search_role in key_clean or key_clean in search_role)):
+                        rubric = val
+                        break
+    except Exception as e:
+        print(f"  ⚠ Failed to load rubric: {e}")
 
-    # 3. Call AI
+    history = get_candidate_by_id(candidate_id) if candidate_id else None
+
+    # 3. Build prompt
+    prompt = build_prompt(candidate_name, requirements, sources, kws, original_role, rubric, history)
+
+    # 4. Call AI
     scores = call_gemini(prompt)
 
     scoring_failed = False
@@ -316,9 +373,12 @@ def evaluate_candidate(candidate_name: str, requirements: list[str],
         scores["whats_changed_summary"] = "AI evaluation failed"
         scores["re_engage_flag"] = False
         scores["status"] = "Watch"
+        scores["ai_summary"] = "AI evaluation failed"
+        scores["top_strengths"] = []
+        scores["top_weaknesses"] = []
         scoring_failed = True
 
-    # 4. Compute final rescoring score
+    # 5. Compute final rescoring score
     rescoring_score = 0.0
     for dim, weight in WEIGHTS.items():
         s = scores.get(dim, 0)
@@ -335,7 +395,7 @@ def evaluate_candidate(candidate_name: str, requirements: list[str],
     print(f"  STEP 3 — Final Candidate Score: {rescoring_score:.1f}/100")
     print(f"{'═'*60}")
 
-    # 5. Extract usernames and save to DB
+    # 6. Extract usernames and save to DB
     u_save = {
         "github_username":   sources.get("github", {}).get("username"),
         "linkedin_username": sources.get("linkedin", {}).get("username"),
@@ -345,26 +405,43 @@ def evaluate_candidate(candidate_name: str, requirements: list[str],
         "hashnode_username": sources.get("hashnode", {}).get("username"),
     }
 
-    db_id = insert_candidate(
-        name=candidate_name,
-        dimensions=scores,
-        usernames=u_save,
-        original_role=original_role,
-        original_tier=original_tier,
-        fit_direction=scores.get("fit_direction", ""),
-        whats_changed_summary=scores.get("whats_changed_summary", ""),
-        re_engage_flag=scores.get("re_engage_flag", False),
-        status=scores.get("status", "")
-    )
-    print(f"  ✓ Saved to database with ID {db_id}")
+    if candidate_id:
+        # Update existing
+        update_candidate(
+            candidate_id=candidate_id,
+            dimensions=scores,
+            usernames=u_save,
+            fit_direction=scores.get("fit_direction", ""),
+            whats_changed_summary=scores.get("whats_changed_summary", ""),
+            re_engage_flag=scores.get("re_engage_flag", False),
+            status=scores.get("status", "")
+        )
+        returned_db_id = candidate_id
+        print(f"  ✓ Updated existing database row for id {returned_db_id}")
+    else:
+        returned_db_id = insert_candidate(
+            name=candidate_name,
+            dimensions=scores,
+            usernames=u_save,
+            original_role=original_role,
+            fit_direction=scores.get("fit_direction", ""),
+            whats_changed_summary=scores.get("whats_changed_summary", ""),
+            re_engage_flag=scores.get("re_engage_flag", False),
+            status=scores.get("status", "")
+        )
+        print(f"  ✓ Saved to database with new id {returned_db_id}")
+
+    # 5. Search for lifestyle social media
+    lifestyle_socials = search_lifestyle_socials(candidate_name, requirements)
 
     return {
         "candidate_name": candidate_name,
         "rescoring_score": rescoring_score,
         "scores": scores,
         "sources": sources,
-        "db_id": db_id,
+        "db_id": returned_db_id,
         "scoring_failed": scoring_failed,
+        "lifestyle_socials": lifestyle_socials
     }
 
 

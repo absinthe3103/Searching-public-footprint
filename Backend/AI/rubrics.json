@@ -1,0 +1,27 @@
+{
+  "Back-end Developer": {
+    "technical_competency": "To score 90-100: Must demonstrate mastery of server-side languages (Python, Go, Node.js, Java), database architecture (SQL/NoSQL), microservices, API design, and strong CI/CD automation. To score 70-89: Shows solid understanding of backend frameworks and database operations, but lacks advanced system design or automation.",
+    "problem_solving": "To score 90-100: Evidence of solving complex scalability, concurrency, or performance bottlenecks. To score 70-89: Can implement standard CRUD features and resolve typical bugs.",
+    "role_domain_relevance": "To score 90-100: Extensive backend-focused repositories, contributions to backend open source, or technical articles about server infrastructure."
+  },
+  "Front-End Developer": {
+    "technical_competency": "To score 90-100: Must demonstrate mastery of modern UI frameworks (React, Vue, Angular), state management, responsive design, performance optimization (Core Web Vitals), and accessibility (a11y). To score 70-89: Can build functional interfaces using frameworks but lacks deep optimization or modern architectural patterns.",
+    "problem_solving": "To score 90-100: Evidence of handling complex client-side state, reducing bundle sizes, or building custom reusable component libraries.",
+    "role_domain_relevance": "To score 90-100: Extensive UI/UX focused repositories, interactive web demos, or technical articles about frontend performance."
+  },
+  "Software Engineer": {
+    "technical_competency": "To score 90-100: Must demonstrate strong full-stack capabilities, clean code architecture (SOLID), testing practices (TDD), and cloud deployments. To score 70-89: Can write functional code and deploy basic applications, but lacks rigorous testing or architectural maturity.",
+    "problem_solving": "To score 90-100: Evidence of end-to-end feature delivery involving both complex logic and infrastructure decisions.",
+    "role_domain_relevance": "To score 90-100: Repositories showing complete, deployable applications with both client and server components."
+  },
+  "AI-Engineer": {
+    "technical_competency": "To score 90-100: Must demonstrate mastery of ML frameworks (PyTorch, TensorFlow), LLM integration/RAG architectures, data pipelines, and MLOps (model deployment/monitoring). To score 70-89: Can train basic models or use APIs, but lacks robust MLOps or advanced architecture knowledge.",
+    "problem_solving": "To score 90-100: Evidence of optimizing model inference speed, handling massive datasets, or creating novel AI architectures.",
+    "role_domain_relevance": "To score 90-100: Extensive AI/ML focused repositories, Kaggle achievements, or publications in AI."
+  },
+  "Software Tester": {
+    "technical_competency": "To score 90-100: Must demonstrate mastery of automated testing frameworks (Selenium, Cypress, PyTest), CI/CD test integration, performance testing, and writing comprehensive test plans. To score 70-89: Can write basic unit/integration tests but relies heavily on manual testing or lacks framework expertise.",
+    "problem_solving": "To score 90-100: Evidence of identifying edge-case bugs in complex systems, building custom test harnesses, or significantly improving test coverage.",
+    "role_domain_relevance": "To score 90-100: Repositories dedicated to QA automation, testing utilities, or contributions to testing frameworks."
+  }
+}

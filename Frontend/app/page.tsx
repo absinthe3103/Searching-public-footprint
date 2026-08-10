@@ -36,11 +36,13 @@ interface EvaluateResponse {
   db_id: number
   scoring_failed?: boolean
   status?: string
+  ai_summary?: string
   fit_direction?: string
   whats_changed_summary?: string
   re_engage_flag?: boolean
   original_role?: string
-  original_tier?: string
+  possible_profiles?: Record<string, string[]>
+  lifestyle_socials?: { facebook: string, instagram: string }
 }
 
 /* ── Constants ──────────────────────────────────────────── */
@@ -208,8 +210,7 @@ function drawRadar(canvas: HTMLCanvasElement, scores: DimensionScores) {
 export default function Page() {
   const [view, setView] = useState<'search' | 'talent_radar'>('search')
   const [candidateName, setCandidateName] = useState('')
-  const [originalRole, setOriginalRole] = useState('Senior Backend Engineer')
-  const [originalTier, setOriginalTier] = useState('Tier 1')
+  const [originalRole, setOriginalRole] = useState('Back-end Developer')
   const [requirements, setRequirements] = useState<string[]>([
     'Python', 'Machine Learning', 'API Design'
   ])
@@ -226,6 +227,8 @@ export default function Page() {
   })
   const [showUsernames, setShowUsernames] = useState(false)
   const [fieldUrlHints, setFieldUrlHints] = useState<Record<string, boolean>>({})
+  const [hasEvaluatedBefore, setHasEvaluatedBefore] = useState(false)
+  const [selectedCandidateId, setSelectedCandidateId] = useState('')
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -282,7 +285,7 @@ export default function Page() {
         body: JSON.stringify({
           candidate_name: candidateName.trim(),
           original_role: originalRole.trim(),
-          original_tier: originalTier.trim(),
+          candidate_id: hasEvaluatedBefore && selectedCandidateId ? parseInt(selectedCandidateId, 10) : undefined,
           job_requirements: requirements,
           backend: 'gemini',
           ...usernamePayload,
@@ -303,7 +306,7 @@ export default function Page() {
       clearInterval(interval)
       setLoading(false)
     }
-  }, [candidateName, requirements, usernames, originalRole, originalTier])
+  }, [candidateName, requirements, usernames, originalRole, hasEvaluatedBefore, selectedCandidateId])
 
   // Redraw radar chart whenever the tab changes or result updates
   useEffect(() => {
@@ -315,23 +318,37 @@ export default function Page() {
     }
   }, [result, view])
 
+  // Fetch candidates when checkbox is checked
+  useEffect(() => {
+    if (hasEvaluatedBefore && candidates.length === 0) {
+      fetch(`${API_URL}/candidates`)
+        .then(res => res.ok ? res.json() : [])
+        .then(data => setCandidates(data))
+        .catch(e => console.error('Failed to fetch candidates', e))
+    }
+  }, [hasEvaluatedBefore])
+
   // ── Stats Calculations for Dashboard ──
-  const gh = result?.source_details?.github
+  const isGuessed = (key: string) => !!result?.possible_profiles?.[key]?.length
+
+  const gh = !isGuessed('github') ? result?.source_details?.github : null
   const ghFound = !!(gh && gh.profile_url)
   const ghStars = gh?.contribution_activity?.total_stars ?? 0
   const ghFollowers = gh?.contribution_activity?.followers ?? 0
   const ghRepos = gh?.contribution_activity?.public_repos ?? gh?.repos?.length ?? 0
   const ghLanguages = gh?.top_languages ?? []
+  const ghLangStats = gh?.language_stats ?? {}
   const ghLatestPush = gh?.latest_push ?? null
+  const ghCareer = gh?.career_indicators ?? null
 
-  const li = result?.source_details?.linkedin
+  const li = !isGuessed('linkedin') ? result?.source_details?.linkedin : null
   const liFound = !!(li && li.profile_url)
   const liRole = li?.current_role ?? null
   const liCompany = li?.company ?? null
   const liSummary = li?.summary ?? null
 
-  const gs = result?.source_details?.google_scholar
-  const rg = result?.source_details?.researchgate
+  const gs = !isGuessed('google_scholar') ? result?.source_details?.google_scholar : null
+  const rg = !isGuessed('researchgate') ? result?.source_details?.researchgate : null
   const acadFound = !!((gs && gs.profile_url) || (rg && rg.profile_url))
   const citations = Number(gs?.citations ?? rg?.citations ?? 0)
   const pubs = [...(gs?.publications ?? []), ...(rg?.publications ?? [])]
@@ -343,10 +360,10 @@ export default function Page() {
       ? rawInterests.map((s: any) => String(s).trim()).filter(Boolean)
       : []
 
-  const devto = result?.source_details?.devto
-  const medium = result?.source_details?.medium
-  const hashnode = result?.source_details?.hashnode
-  const kaggle = result?.source_details?.kaggle
+  const devto = !isGuessed('devto') ? result?.source_details?.devto : null
+  const medium = !isGuessed('medium') ? result?.source_details?.medium : null
+  const hashnode = !isGuessed('hashnode') ? result?.source_details?.hashnode : null
+  const kaggle = !isGuessed('kaggle') ? result?.source_details?.kaggle : null
   const devtoCount = devto?.articles?.length ?? 0
   const mediumCount = medium?.articles?.length ?? 0
   const hashnodeCount = hashnode?.articles?.length ?? 0
@@ -514,7 +531,6 @@ export default function Page() {
                             </div>
 
                             <div style={{ display: 'flex', gap: 12, fontSize: 11 }}>
-                              <div style={{ color: 'var(--slate)' }}>Tier: <span style={{ color: 'white' }}>{c.original_tier || 'N/A'}</span></div>
                               <div style={{ color: 'var(--slate)' }}>Fit: <span style={{ color: 'white', textTransform: 'capitalize' }}>{c.fit_direction || 'N/A'}</span></div>
                             </div>
                           </div>
@@ -598,22 +614,17 @@ export default function Page() {
 
                 <div style={{ marginBottom: 20 }}>
                   <label className="field-label">Original Role Applied For</label>
-                  <input
+                  <select
                     className="field-input"
-                    placeholder="e.g. Senior Backend Engineer"
                     value={originalRole}
                     onChange={e => setOriginalRole(e.target.value)}
-                  />
-                </div>
-
-                <div style={{ marginBottom: 20 }}>
-                  <label className="field-label">Original HINT Tier</label>
-                  <input
-                    className="field-input"
-                    placeholder="e.g. Tier 1"
-                    value={originalTier}
-                    onChange={e => setOriginalTier(e.target.value)}
-                  />
+                  >
+                    <option value="Back-end Developer">Back-end Developer</option>
+                    <option value="Front-End Developer">Front-End Developer</option>
+                    <option value="Software Engineer">Software Engineer</option>
+                    <option value="AI-Engineer">AI-Engineer</option>
+                    <option value="Software Tester">Software Tester</option>
+                  </select>
                 </div>
 
                 <div className="section-label">Job requirements</div>
@@ -683,6 +694,43 @@ export default function Page() {
                   <button className="btn btn-ghost" onClick={addReq} aria-label="Add requirement" style={{ padding: '9px 12px' }}>
                     <i className="ti ti-plus" aria-hidden style={{ fontSize: 15 }} />
                   </button>
+                </div>
+
+                <div style={{ marginTop: 24, padding: '12px 14px', background: 'var(--navy3)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', fontSize: 13, color: 'var(--gold2)' }}>
+                    <input
+                      type="checkbox"
+                      checked={hasEvaluatedBefore}
+                      onChange={e => setHasEvaluatedBefore(e.target.checked)}
+                      style={{ accentColor: 'var(--gold2)', width: 16, height: 16, flexShrink: 0, marginTop: 2 }}
+                    />
+                    <span style={{ lineHeight: 1.4 }}>Previously evaluated candidate?</span>
+                  </label>
+
+                  {hasEvaluatedBefore && (
+                    <div style={{ marginTop: 12 }}>
+                      <select
+                        className="field-input"
+                        value={selectedCandidateId}
+                        onChange={e => {
+                          setSelectedCandidateId(e.target.value)
+                          const selected = candidates.find(c => c.id.toString() === e.target.value)
+                          if (selected) {
+                            setCandidateName(selected.name)
+                            setOriginalRole(selected.original_role || '')
+                          }
+                        }}
+                        style={{ width: '100%', padding: '8px 12px', fontSize: 12 }}
+                      >
+                        <option value="">-- Select previously evaluated candidate --</option>
+                        {candidates.map(c => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} ({c.original_role || 'Unknown Role'})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
 
                 {/* Evaluate button */}
@@ -866,6 +914,84 @@ export default function Page() {
                       </div>
                     </div>
 
+                    {/* Possible Accounts */}
+                    <div style={{ marginTop: 24 }}>
+                      <div className="section-label">Possible Accounts</div>
+                      {(!result.possible_profiles || Object.keys(result.possible_profiles).length === 0) ? (
+                        <div style={{ fontSize: 12, color: 'var(--slate2)', fontStyle: 'italic', padding: '4px 0' }}>
+                          No possible account Found
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                          {Object.entries(result.possible_profiles).map(([platform, urls]) => {
+                            const sourceDef = SOURCES.find(s => s.key === platform)
+                            const label = sourceDef ? sourceDef.label : platform.charAt(0).toUpperCase() + platform.slice(1)
+                            const icon = sourceDef ? sourceDef.icon : 'ti-link'
+                            return (
+                              <div key={platform} style={{ background: 'var(--navy3)', padding: 12, borderRadius: 8, border: '0.5px solid var(--border)' }}>
+                                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--slate2)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <i className={`ti ${icon}`} style={{ fontSize: 14 }} />
+                                  {label}
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                  {urls.map((url, i) => (
+                                    <a key={i} href={url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: 'var(--gold2)', textDecoration: 'none', wordBreak: 'break-all', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                      <i className="ti ti-external-link" style={{ fontSize: 12 }} />
+                                      {url}
+                                    </a>
+                                  ))}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Lifestyle Social Media */}
+                    {result.lifestyle_socials && (
+                      <div style={{ marginTop: 24 }}>
+                        <div className="section-label">Lifestyle Social Media</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                          {/* Facebook Card */}
+                          <div style={{ background: 'var(--navy3)', padding: 12, borderRadius: 8, border: '0.5px solid var(--border)' }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--slate2)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <i className="ti ti-brand-facebook" style={{ fontSize: 14 }} />
+                              Facebook
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {result.lifestyle_socials.facebook?.includes('http') ? (
+                                <a href={result.lifestyle_socials.facebook} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: 'var(--gold2)', textDecoration: 'none', wordBreak: 'break-all', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <i className="ti ti-external-link" style={{ fontSize: 12 }} />
+                                  {result.lifestyle_socials.facebook}
+                                </a>
+                              ) : (
+                                <span style={{ fontSize: 11, color: 'var(--slate2)', fontStyle: 'italic' }}>{result.lifestyle_socials.facebook || 'no account found'}</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Instagram Card */}
+                          <div style={{ background: 'var(--navy3)', padding: 12, borderRadius: 8, border: '0.5px solid var(--border)' }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--slate2)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <i className="ti ti-brand-instagram" style={{ fontSize: 14 }} />
+                              Instagram
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {result.lifestyle_socials.instagram?.includes('http') ? (
+                                <a href={result.lifestyle_socials.instagram} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: 'var(--gold2)', textDecoration: 'none', wordBreak: 'break-all', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <i className="ti ti-external-link" style={{ fontSize: 12 }} />
+                                  {result.lifestyle_socials.instagram}
+                                </a>
+                              ) : (
+                                <span style={{ fontSize: 11, color: 'var(--slate2)', fontStyle: 'italic' }}>{result.lifestyle_socials.instagram || 'no account found'}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* ── Analytical Dashboard ── */}
                     <div style={{ marginTop: 8 }}>
                       <div className="section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -913,6 +1039,19 @@ export default function Page() {
                         </div>
                       )}
 
+                      {/* Red Flags Alert Box */}
+                      {result.dimensions?.risk_indicators < 50 && (
+                        <div style={{ background: 'rgba(231, 76, 60, 0.1)', border: '1px solid rgba(231, 76, 60, 0.3)', borderRadius: 8, padding: 14, marginBottom: 20 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#e74c3c', fontWeight: 600, fontSize: 13, marginBottom: 6 }}>
+                            <i className="ti ti-alert-triangle" style={{ fontSize: 16 }} />
+                            High Risk / Red Flags Detected
+                          </div>
+                          <div style={{ fontSize: 12, color: 'var(--text)', lineHeight: 1.5 }}>
+                            {result.reasoning?.risk_indicators || 'Significant inconsistencies or lack of verifiable public presence detected.'}
+                          </div>
+                        </div>
+                      )}
+
                       <div style={styles.dbGrid}>
 
                         {/* GitHub Card */}
@@ -949,12 +1088,21 @@ export default function Page() {
                               {ghLanguages.length > 0 && (
                                 <div>
                                   <div style={styles.dbSubLabel}>Top Languages</div>
-                                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
-                                    {ghLanguages.slice(0, 4).map((lang: string) => (
-                                      <span key={lang} style={styles.langBadge}>
-                                        {lang}
-                                      </span>
-                                    ))}
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                                    {ghLanguages.slice(0, 4).map((lang: string) => {
+                                      const count = ghLangStats[lang] || 0
+                                      const total = Object.values(ghLangStats).reduce((a: any, b: any) => a + b, 0) as number
+                                      const pct = total > 0 ? Math.round((count / total) * 100) : 0
+                                      return (
+                                        <div key={lang} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                          <span style={{ fontSize: 11, width: 65, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{lang}</span>
+                                          <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 2, overflow: 'hidden' }}>
+                                            <div style={{ height: '100%', width: `${pct}%`, background: 'var(--gold2)', borderRadius: 2 }} />
+                                          </div>
+                                          <span style={{ fontSize: 10, color: 'var(--muted)', width: 25, textAlign: 'right' }}>{pct}%</span>
+                                        </div>
+                                      )
+                                    })}
                                   </div>
                                 </div>
                               )}
@@ -972,6 +1120,44 @@ export default function Page() {
                             </div>
                           )}
                         </div>
+
+
+                        {/* Career Timeline Card */}
+                        {(ghCareer?.github_account_created || ghCareer?.first_commit_around) && (
+                          <div style={styles.dbCard}>
+                            <div style={styles.dbCardHeader}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <i className="ti ti-timeline" style={{ fontSize: 18, color: 'var(--gold2)' }} />
+                                <span style={{ fontSize: 13, fontWeight: 600 }}>Career Timeline</span>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10 }}>
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                                <div style={{ width: 8, height: 8, borderRadius: 4, background: 'var(--gold2)', marginTop: 4 }} />
+                                <div>
+                                  <div style={{ fontSize: 12, color: 'var(--text)', fontWeight: 500 }}>Started Coding Publicly</div>
+                                  <div style={{ fontSize: 11, color: 'var(--slate2)' }}>{ghCareer.github_account_created || ghCareer.first_commit_around}</div>
+                                </div>
+                              </div>
+                              <div style={{ width: 2, height: 16, background: 'rgba(255,255,255,0.1)', marginLeft: 3, marginTop: -8, marginBottom: -8 }} />
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                                <div style={{ width: 8, height: 8, borderRadius: 4, background: 'var(--gold2)', marginTop: 4 }} />
+                                <div>
+                                  <div style={{ fontSize: 12, color: 'var(--text)', fontWeight: 500 }}>Estimated Tenure</div>
+                                  <div style={{ fontSize: 11, color: 'var(--slate2)' }}>{ghCareer.estimated_tenure}</div>
+                                </div>
+                              </div>
+                              <div style={{ width: 2, height: 16, background: 'rgba(255,255,255,0.1)', marginLeft: 3, marginTop: -8, marginBottom: -8 }} />
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                                <div style={{ width: 8, height: 8, borderRadius: 4, background: 'var(--green)', marginTop: 4, boxShadow: '0 0 8px var(--green)' }} />
+                                <div>
+                                  <div style={{ fontSize: 12, color: 'var(--text)', fontWeight: 500 }}>Latest Activity</div>
+                                  <div style={{ fontSize: 11, color: 'var(--slate2)' }}>{ghLatestPush || 'Unknown'}</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
 
                         {/* Career & Role Card (LinkedIn) */}
                         <div style={styles.dbCard}>
@@ -1245,6 +1431,33 @@ export default function Page() {
                     {/* ── AI Summary (placeholder — backend TBD) ── */}
                     <div>
                       <div className="section-label">AI Summary</div>
+
+                      {/* Strengths and Weaknesses */}
+                      {((result.top_strengths && result.top_strengths.length > 0) || (result.top_weaknesses && result.top_weaknesses.length > 0)) && (
+                        <div style={{ display: 'flex', gap: 20, marginBottom: 16 }}>
+                          {result.top_strengths && result.top_strengths.length > 0 && (
+                            <div style={{ flex: 1, background: 'rgba(46, 204, 113, 0.05)', border: '1px solid rgba(46, 204, 113, 0.2)', borderRadius: 8, padding: 12 }}>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--green)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <i className="ti ti-thumb-up" /> Top Strengths
+                              </div>
+                              <ul style={{ margin: 0, paddingLeft: 20, fontSize: 12, color: 'var(--text)', lineHeight: 1.6 }}>
+                                {result.top_strengths.map((s, i) => <li key={i}>{s}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                          {result.top_weaknesses && result.top_weaknesses.length > 0 && (
+                            <div style={{ flex: 1, background: 'rgba(231, 76, 60, 0.05)', border: '1px solid rgba(231, 76, 60, 0.2)', borderRadius: 8, padding: 12 }}>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: '#e74c3c', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <i className="ti ti-thumb-down" /> Weaknesses / Concerns
+                              </div>
+                              <ul style={{ margin: 0, paddingLeft: 20, fontSize: 12, color: 'var(--text)', lineHeight: 1.6 }}>
+                                {result.top_weaknesses.map((w, i) => <li key={i}>{w}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <div style={styles.aiSummaryBox}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                           <div style={styles.aiSummaryIcon}>
@@ -1257,10 +1470,18 @@ export default function Page() {
                           <span className="badge" style={{ marginLeft: 'auto', fontSize: 9, padding: '2px 8px', background: 'rgba(201,168,76,0.08)', border: '0.5px solid var(--gold-dim)', color: 'var(--gold-dim)' }}>Coming soon</span>
                         </div>
                         <div style={styles.aiSummaryPlaceholder}>
-                          <i className="ti ti-sparkles" aria-hidden style={{ fontSize: 28, color: 'var(--gold-dim)', marginBottom: 8 }} />
-                          <p style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center', lineHeight: 1.7, maxWidth: 280 }}>
-                            A concise natural-language summary of this candidate's public footprint will appear here once an AI model is configured.
-                          </p>
+                          {result.ai_summary ? (
+                            <p style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.6, whiteSpace: 'pre-line', textAlign: 'left' }}>
+                              {result.ai_summary}
+                            </p>
+                          ) : (
+                            <>
+                              <i className="ti ti-sparkles" aria-hidden style={{ fontSize: 28, color: 'var(--gold-dim)', marginBottom: 8 }} />
+                              <p style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center', lineHeight: 1.7, maxWidth: 280 }}>
+                                A concise natural-language summary of this candidate's public footprint will appear here once an AI model is configured.
+                              </p>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>

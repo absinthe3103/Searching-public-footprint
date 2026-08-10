@@ -184,22 +184,52 @@ def parse_identifier(identifier, platform: str):
     return ident.lstrip("@")
 
 
-def username_guesses(name: str) -> list:
-    parts = name.lower().split()
-    guesses = []
-    if len(parts) >= 2:
-        guesses += [
-            "".join(parts),
-            f"{parts[0]}.{parts[-1]}",
-            f"{parts[0]}{parts[-1]}",
-            f"{parts[0]}-{parts[-1]}",
-            f"{parts[0][0]}{parts[-1]}",
-            parts[0],
-            parts[-1],
-        ]
-    else:
-        guesses.append(parts[0])
-    return list(dict.fromkeys(guesses))
+
+from ddgs import DDGS
+
+def find_profile_url_via_ddg(name: str, platform: str, keywords: list) -> str:
+    """
+    Search DuckDuckGo for a candidate's profile URL.
+    """
+    kw_str = " ".join(keywords[:2])
+    query = f'site:{platform}.com "{name}" {kw_str}'
+    
+    if platform == "google_scholar":
+        query = f'site:scholar.google.com "{name}" {kw_str}'
+    elif platform == "researchgate":
+        query = f'site:researchgate.net/profile "{name}" {kw_str}'
+
+    try:
+        results = DDGS().text(query, max_results=1)
+        if results:
+            return results[0].get("href")
+    except Exception as e:
+        print(f"  [DuckDuckGo Search] Exception for {platform}: {e}")
+        
+    return None
+
+    kw_str = " ".join(keywords[:2])
+    query = f'site:{platform}.com "{name}" {kw_str}'
+    
+    if platform == "google_scholar":
+        query = f'site:scholar.google.com "{name}" {kw_str}'
+    elif platform == "researchgate":
+        query = f'site:researchgate.net/profile "{name}" {kw_str}'
+
+    url = "https://www.googleapis.com/customsearch/v1"
+    params = {"key": GOOGLE_SEARCH_API_KEY, "cx": GOOGLE_CSE_ID, "q": query, "num": 1}
+
+    try:
+        r = requests.get(url, params=params, timeout=5)
+        if r.status_code == 200:
+            items = r.json().get("items", [])
+            if items:
+                return items[0].get("link")
+    except Exception as e:
+        print(f"  [Google Search] Exception: {e}")
+        
+    return None
+
 
 
 # ──────────────────────────────────────────────────────────
@@ -217,21 +247,18 @@ def search_github(name: str, keywords: list, identifier: str = None) -> dict:
         "summary": "Not found"
     }
 
-    # ── No identifier supplied → guess usernames ──────────
+    # ── No identifier supplied → search via Google ──────────
     if not handle:
-        print("\n[GitHub] No identifier provided — guessing...")
-        guesses = username_guesses(name)
-        possible_urls = []
-        for g in guesses:
-            print(f"  [GitHub] Trying guess '{g}' ...")
-            p = safe_get(f"{GITHUB_API}/users/{g}")
-            if p and p.status_code == 200:
-                possible_urls.append(p.json().get("html_url", f"https://github.com/{g}"))
-                print(f"    -> Found possible profile: {possible_urls[-1]}")
-            time.sleep(DELAY)
-        out["possible_profiles"] = possible_urls
-        out["summary"] = "Not provided — guessed"
-        return out
+        print("\n[GitHub] No identifier provided — searching DuckDuckGo...")
+        found_url = find_profile_url_via_ddg(name, "github", keywords)
+        if found_url:
+            print(f"  [GitHub] Found URL: {found_url}")
+            handle = parse_identifier(found_url, "github")
+            out["possible_profiles"] = [found_url]
+        
+        if not handle:
+            out["summary"] = "Not provided and DuckDuckGo Search failed."
+            return out
 
     print(f"\n[GitHub] Trying direct username '{handle}' ...")
     p = safe_get(f"{GITHUB_API}/users/{handle}")
@@ -292,6 +319,7 @@ def search_github(name: str, keywords: list, identifier: str = None) -> dict:
                 })
 
     out["top_languages"]  = sorted(lang_count, key=lang_count.get, reverse=True)[:5]
+    out["language_stats"] = lang_count
     out["keyword_hits"]   = kw_score(repo_text, keywords)
 
     recent_pushes = [repo["last_push"] for repo in out["repos"] if repo.get("last_push")]
@@ -340,25 +368,18 @@ def search_linkedin(name: str, keywords: list, identifier: str = None) -> dict:
         "linkedin_from_github": None,
     }
 
-    # ── No identifier supplied → guess usernames ──────────
+    # ── No identifier supplied → search via Google ──────────
     if not handle:
-        print("\n[LinkedIn] No identifier provided — guessing...")
-        guesses = username_guesses(name)
-        possible_urls = []
-        for g in guesses:
-            print(f"  [LinkedIn] Trying guess '{g}' ...")
-            query = f'site:linkedin.com/in "{g}"'
-            res = search_web_snippets(query)
-            if res:
-                for r in res:
-                    if "linkedin.com/in/" in r["url"]:
-                        possible_urls.append(r["url"])
-                        print(f"    -> Found possible profile: {r['url']}")
-                        break
-            time.sleep(DELAY)
-        out["possible_profiles"] = possible_urls
-        out["summary"] = "Not provided — guessed"
-        return out
+        print("\n[LinkedIn] No identifier provided — searching DuckDuckGo...")
+        found_url = find_profile_url_via_ddg(name, "linkedin", keywords)
+        if found_url:
+            print(f"  [LinkedIn] Found URL: {found_url}")
+            handle = parse_identifier(found_url, "linkedin")
+            out["possible_profiles"] = [found_url]
+        
+        if not handle:
+            out["summary"] = "Not provided and DuckDuckGo Search failed."
+            return out
 
     slug = handle.rstrip("/")
     direct_url = f"https://www.linkedin.com/in/{slug}"
@@ -419,22 +440,18 @@ def search_google_scholar(name: str, keywords: list, identifier: str = None) -> 
         "source_used": None,
     }
 
-    # ── No identifier supplied → guess by name ──────────
+    # ── No identifier supplied → search via Google ──────────
     if not identifier or not identifier.strip():
-        print("\n[Google Scholar] No identifier provided — guessing by name...")
-        possible_urls = []
-        try:
-            from scholarly import scholarly as _scholarly
-            search_query = _scholarly.search_author(name)
-            first_author = next(search_query, None)
-            if first_author:
-                possible_urls.append(f"https://scholar.google.com/citations?user={first_author['scholar_id']}")
-                print(f"    -> Found possible profile: {possible_urls[-1]}")
-        except Exception as e:
-            if DEBUG: print(f"    [debug] Scholar guessing failed: {e}")
-        out["possible_profiles"] = possible_urls
-        out["summary"] = "Not provided — guessed"
-        return out
+        print("\\n[Google Scholar] No identifier provided — searching DuckDuckGo...")
+        found_url = find_profile_url_via_ddg(name, "google_scholar", keywords)
+        if found_url:
+            print(f"  [Google Scholar] Found URL: {found_url}")
+            identifier = parse_identifier(found_url, "google_scholar")
+            out["possible_profiles"] = [found_url]
+        
+        if not identifier:
+            out["summary"] = "Not provided and DuckDuckGo Search failed."
+            return out
 
     # Parse both Semantic Scholar and Google Scholar URL patterns
     google_scholar_uid = parse_identifier(identifier, "google_scholar")
@@ -622,24 +639,18 @@ def search_researchgate(name: str, keywords: list, identifier: str = None) -> di
         "source_used": None,
     }
 
-    # ── No identifier supplied → guess usernames ──────────
+    # ── No identifier supplied → search via Google ──────────
     if not identifier or not identifier.strip():
-        print("\n[ResearchGate] No identifier provided — guessing...")
-        guesses = username_guesses(name)
-        possible_urls = []
-        for g in guesses:
-            print(f"  [ResearchGate] Trying guess '{g}' ...")
-            res = search_web_snippets(f'site:researchgate.net/profile "{g}"')
-            if res:
-                for r in res:
-                    if "researchgate.net/profile/" in r["url"]:
-                        possible_urls.append(r["url"])
-                        print(f"    -> Found possible profile: {r['url']}")
-                        break
-            time.sleep(DELAY)
-        out["possible_profiles"] = possible_urls
-        out["summary"] = "Not provided — guessed"
-        return out
+        print("\\n[ResearchGate] No identifier provided — searching DuckDuckGo...")
+        found_url = find_profile_url_via_ddg(name, "researchgate", keywords)
+        if found_url:
+            print(f"  [ResearchGate] Found URL: {found_url}")
+            identifier = parse_identifier(found_url, "researchgate")
+            out["possible_profiles"] = [found_url]
+        
+        if not identifier:
+            out["summary"] = "Not provided and DuckDuckGo Search failed."
+            return out
 
     orcid_handle     = parse_identifier(identifier, "orcid")
     rg_handle_direct = parse_identifier(identifier, "researchgate")
@@ -795,19 +806,16 @@ def search_kaggle(name: str, keywords: list, identifier: str = None) -> dict:
 
     # ── No identifier supplied → guess usernames ──────────
     if not handle:
-        print("\n[Kaggle] No identifier provided — guessing...")
-        guesses = username_guesses(name)
-        possible_urls = []
-        for g in guesses:
-            print(f"  [Kaggle] Trying guess '{g}' ...")
-            r = safe_get(f"https://www.kaggle.com/{g}")
-            if r and r.status_code == 200:
-                possible_urls.append(f"https://www.kaggle.com/{g}")
-                print(f"    -> Found possible profile: {possible_urls[-1]}")
-            time.sleep(DELAY)
-        out["possible_profiles"] = possible_urls
-        out["summary"] = "Not provided — guessed"
-        return out
+        print("\n[Kaggle] No identifier provided — searching DuckDuckGo...")
+        found_url = find_profile_url_via_ddg(name, "kaggle", keywords)
+        if found_url:
+            print(f"  [Kaggle] Found URL: {found_url}")
+            handle = parse_identifier(found_url, "kaggle")
+            out["possible_profiles"] = [found_url]
+        
+        if not handle:
+            out["summary"] = "Not provided and DuckDuckGo Search failed."
+            return out
 
     print(f"\n[Kaggle] Trying identifier '{handle}' ...")
 
@@ -891,19 +899,16 @@ def search_devto(name: str, keywords: list, identifier: str = None) -> dict:
 
     # ── No identifier supplied → guess usernames ──────────
     if not handle:
-        print("\n[Dev.to] No identifier provided — guessing...")
-        guesses = username_guesses(name)
-        possible_urls = []
-        for g in guesses:
-            print(f"  [Dev.to] Trying guess '{g}' ...")
-            r = safe_get(f"https://dev.to/api/articles?username={g}&per_page=1")
-            if r and r.status_code == 200:
-                possible_urls.append(f"https://dev.to/{g}")
-                print(f"    -> Found possible profile: {possible_urls[-1]}")
-            time.sleep(DELAY)
-        out["possible_profiles"] = possible_urls
-        out["summary"] = "Not provided — guessed"
-        return out
+        print("\n[Dev.to] No identifier provided — searching DuckDuckGo...")
+        found_url = find_profile_url_via_ddg(name, "devto", keywords)
+        if found_url:
+            print(f"  [Dev.to] Found URL: {found_url}")
+            handle = parse_identifier(found_url, "devto")
+            out["possible_profiles"] = [found_url]
+        
+        if not handle:
+            out["summary"] = "Not provided and DuckDuckGo Search failed."
+            return out
 
     print(f"\n[Dev.to] Trying identifier '{handle}' ...")
     r = safe_get(f"https://dev.to/api/articles?username={handle}&per_page=10")
@@ -970,19 +975,16 @@ def search_medium(name: str, keywords: list, identifier: str = None) -> dict:
 
     # ── No identifier supplied → guess usernames ──────────
     if not handle:
-        print("\n[Medium] No identifier provided — guessing...")
-        guesses = username_guesses(name)
-        possible_urls = []
-        for g in guesses:
-            print(f"  [Medium] Trying guess '{g}' ...")
-            r = safe_get(f"https://medium.com/@{g}")
-            if r and r.status_code == 200:
-                possible_urls.append(f"https://medium.com/@{g}")
-                print(f"    -> Found possible profile: {possible_urls[-1]}")
-            time.sleep(DELAY)
-        out["possible_profiles"] = possible_urls
-        out["summary"] = "Not provided — guessed"
-        return out
+        print("\n[Medium] No identifier provided — searching DuckDuckGo...")
+        found_url = find_profile_url_via_ddg(name, "medium", keywords)
+        if found_url:
+            print(f"  [Medium] Found URL: {found_url}")
+            handle = parse_identifier(found_url, "medium")
+            out["possible_profiles"] = [found_url]
+        
+        if not handle:
+            out["summary"] = "Not provided and DuckDuckGo Search failed."
+            return out
 
     candidate_url = f"https://medium.com/@{handle}"
     print(f"\n[Medium] Trying direct username '{handle}' ...")
@@ -1056,19 +1058,16 @@ def search_hashnode(name: str, keywords: list, identifier: str = None) -> dict:
 
     # ── No identifier supplied → guess usernames ──────────
     if not handle:
-        print("\n[Hashnode] No identifier provided — guessing...")
-        guesses = username_guesses(name)
-        possible_urls = []
-        for g in guesses:
-            print(f"  [Hashnode] Trying guess '{g}' ...")
-            r = safe_get(f"https://hashnode.com/@{g}")
-            if r and r.status_code == 200:
-                possible_urls.append(f"https://hashnode.com/@{g}")
-                print(f"    -> Found possible profile: {possible_urls[-1]}")
-            time.sleep(DELAY)
-        out["possible_profiles"] = possible_urls
-        out["summary"] = "Not provided — guessed"
-        return out
+        print("\n[Hashnode] No identifier provided — searching DuckDuckGo...")
+        found_url = find_profile_url_via_ddg(name, "hashnode", keywords)
+        if found_url:
+            print(f"  [Hashnode] Found URL: {found_url}")
+            handle = parse_identifier(found_url, "hashnode")
+            out["possible_profiles"] = [found_url]
+        
+        if not handle:
+            out["summary"] = "Not provided and DuckDuckGo Search failed."
+            return out
 
     print(f"\n[Hashnode] Trying identifier '{handle}' ...")
     r = safe_get(f"https://hashnode.com/@{handle}")
