@@ -210,6 +210,8 @@ export default function Page() {
   const [candidateName, setCandidateName] = useState('')
   const [originalRole, setOriginalRole] = useState('Senior Backend Engineer')
   const [originalTier, setOriginalTier] = useState('Tier 1')
+  const [university, setUniversity] = useState('')
+  const [summaryProfile, setSummaryProfile] = useState('')
   const [requirements, setRequirements] = useState<string[]>([
     'Python', 'Machine Learning', 'API Design'
   ])
@@ -286,6 +288,8 @@ export default function Page() {
           original_tier: originalTier.trim(),
           job_requirements: requirements,
           backend: backend,
+          university: university.trim() || undefined,
+          summary_profile: summaryProfile.trim() || undefined,
           ...usernamePayload,
         }),
       })
@@ -616,6 +620,32 @@ export default function Page() {
                     placeholder="e.g. Tier 1"
                     value={originalTier}
                     onChange={e => setOriginalTier(e.target.value)}
+                  />
+                </div>
+
+                <div style={{ marginBottom: 20 }}>
+                  <label className="field-label">University / Institution</label>
+                  <input
+                    className="field-input"
+                    placeholder="e.g. Universiti Tunku Abdul Rahman"
+                    value={university}
+                    onChange={e => setUniversity(e.target.value)}
+                  />
+                </div>
+
+                <div style={{ marginBottom: 20 }}>
+                  <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <i className="ti ti-file-description" aria-hidden style={{ fontSize: 11 }} />
+                    Candidate Summary Profile
+                    <span style={{ fontSize: 9, color: 'var(--muted)', marginLeft: 4 }}>optional</span>
+                  </label>
+                  <textarea
+                    className="field-input"
+                    placeholder="Paste a brief summary or HR notes about the candidate for culture-fit analysis..."
+                    value={summaryProfile}
+                    onChange={e => setSummaryProfile(e.target.value)}
+                    rows={3}
+                    style={{ resize: 'vertical', minHeight: 72, lineHeight: 1.5 }}
                   />
                 </div>
 

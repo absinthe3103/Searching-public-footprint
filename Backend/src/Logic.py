@@ -36,7 +36,11 @@ sys.path.insert(0, os.path.join(_BACKEND, "AI"))
 sys.path.insert(0, os.path.join(_BACKEND, "database"))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from api_AI import evaluate_candidate
-from db import get_all_candidates, get_candidate_by_id
+from db import (
+    get_all_candidates, get_candidate_by_id,
+    get_culture_preferences, set_culture_preferences, CULTURE_DIMENSIONS,
+    get_preferred_universities, add_preferred_university, delete_preferred_university,
+)
 
 # ──────────────────────────────────────────────────────────
 # APP SETUP
@@ -64,10 +68,12 @@ class EvaluateRequest(BaseModel):
     job_requirements: list[str]
     original_role:    str | None = None
     original_tier:    str | None = None
+    university:       str | None = None   # optional — candidate's university
+    summary_profile:  str | None = None   # optional — free-text paragraph the AI
+                                           # uses to score the 7 culture dimensions
     backend:          str = "gemini"   # updated to gemini
 
     # Optional exact usernames/URLs for each platform
-    # IT
     github_username:            str | None = None
     linkedin_username:          str | None = None
     kaggle_username:            str | None = None
@@ -76,21 +82,6 @@ class EvaluateRequest(BaseModel):
     hashnode_username:          str | None = None
     google_scholar_identifier:  str | None = None
     researchgate_identifier:    str | None = None
-    # Marketing
-    instagram_username:         str | None = None
-    tiktok_username:            str | None = None
-    meta_ad_page:               str | None = None
-    similarweb_domain:          str | None = None
-    # HR
-    shrm_identifier:            str | None = None
-    cipd_identifier:            str | None = None
-    glassdoor_employer:         str | None = None
-    company_identifier:         str | None = None
-    # Design
-    behance_username:           str | None = None
-    dribbble_username:          str | None = None
-    # Finance
-    finance_license_identifier: str | None = None
 
     class Config:
         json_schema_extra = {
@@ -124,49 +115,36 @@ class DimensionScores(BaseModel):
 
 
 class SourceURLs(BaseModel):
-    # IT
-    github:         str | None = None
-    linkedin:       str | None = None
-    google_scholar: str | None = None
-    researchgate:   str | None = None
-    kaggle:         str | None = None
-    devto:          str | None = None
-    medium:         str | None = None
-    hashnode:       str | None = None
-    # Marketing
-    instagram:       str | None = None
-    tiktok:          str | None = None
-    meta_ad_library: str | None = None
-    similarweb:      str | None = None
-    # HR
-    shrm:     str | None = None
-    cipd:     str | None = None
-    glassdoor: str | None = None
-    ssm_acra:  str | None = None
-    # Design
-    behance:  str | None = None
-    dribbble: str | None = None
-    # Finance
-    sc_mq:    str | None = None
+    github:         str | None
+    linkedin:       str | None
+    google_scholar: str | None
+    researchgate:   str | None
+    kaggle:         str | None
+    devto:          str | None
+    medium:         str | None
+    hashnode:       str | None
 
 
 class EvaluateResponse(BaseModel):
     candidate_name:  str
     original_role:   str | None
     original_tier:   str | None
+    university:      str | None = None
+    summary_profile: str | None = None
     rescoring_score: float
     dimensions:      DimensionScores
+    culture_fit_dimensions: list[str] = []   # e.g. ["team_orientation", "stability"]
     reasoning:       dict
     source_urls:     SourceURLs
     source_details:  dict[str, Any]
     db_id:           int
     scoring_failed:  bool = False
     
-    # Enrichment fields
-    fit_direction:         str
-    whats_changed_summary: str
-    re_engage_flag:        bool
-    status:                str
+    # Enrichment fields — nullable when AI scoring fails
+    fit_direction:         str | None = None
+    whats_changed_summary: str | None = None
+    re_engage_flag:        bool | None = None
+    status:                str | None = None
     possible_profiles:     dict[str, list[str]] = {}
 
 
@@ -175,6 +153,8 @@ class CandidateRow(BaseModel):
     name: str
     original_role:   str | None = None
     original_tier:   str | None = None
+    university:      str | None = None
+    summary_profile: str | None = None
 
     # Source usernames
     github_username:   str | None = None
@@ -195,12 +175,41 @@ class CandidateRow(BaseModel):
     risk_indicators:       float
     role_domain_relevance: float
 
+    # Culture dimensions the AI matched from the candidate's summary_profile
+    # (empty list when no summary_profile was given)
+    culture_fit_dimensions: list[str] = []
+
     # Enrichment fields
     fit_direction:         str | None = None
     whats_changed_summary: str | None = None
     re_engage_flag:        bool | None = None
     status:                str | None = None
 
+    created_at: str
+
+
+class TalentRadarCandidate(CandidateRow):
+    """CandidateRow + why this candidate was surfaced by HR's Preferences
+    settings, so the ranking boost stays visible rather than silently
+    folded into rescoring_score."""
+    university_match:          bool = False
+    matched_culture_dimensions: list[str] = []
+    preference_match:          bool = False
+
+
+class CulturePreferencesUpdate(BaseModel):
+    """selected: the list of culture dimension keys HR has marked as relevant
+    (chip multi-select) — any dimension not listed is turned off."""
+    selected: list[str]
+
+
+class NewUniversity(BaseModel):
+    name: str
+
+
+class PreferredUniversityRow(BaseModel):
+    id:         int
+    name:       str
     created_at: str
 
 
@@ -234,30 +243,14 @@ async def evaluate(req: EvaluateRequest):
         )
 
     usernames = {
-        # IT
-        "github_username":            req.github_username,
-        "linkedin_username":          req.linkedin_username,
-        "kaggle_username":            req.kaggle_username,
-        "devto_username":             req.devto_username,
-        "medium_username":            req.medium_username,
-        "hashnode_username":          req.hashnode_username,
-        "google_scholar_identifier":  req.google_scholar_identifier,
-        "researchgate_identifier":    req.researchgate_identifier,
-        # Marketing
-        "instagram_username":         req.instagram_username,
-        "tiktok_username":            req.tiktok_username,
-        "meta_ad_page":               req.meta_ad_page,
-        "similarweb_domain":          req.similarweb_domain,
-        # HR
-        "shrm_identifier":            req.shrm_identifier,
-        "cipd_identifier":            req.cipd_identifier,
-        "glassdoor_employer":         req.glassdoor_employer,
-        "company_identifier":         req.company_identifier,
-        # Design
-        "behance_username":           req.behance_username,
-        "dribbble_username":          req.dribbble_username,
-        # Finance
-        "finance_license_identifier": req.finance_license_identifier,
+        "github_username":           req.github_username,
+        "linkedin_username":         req.linkedin_username,
+        "kaggle_username":           req.kaggle_username,
+        "devto_username":            req.devto_username,
+        "medium_username":           req.medium_username,
+        "hashnode_username":         req.hashnode_username,
+        "google_scholar_identifier": req.google_scholar_identifier,
+        "researchgate_identifier":   req.researchgate_identifier,
     }
 
     result = evaluate_candidate(
@@ -267,6 +260,8 @@ async def evaluate(req: EvaluateRequest):
         usernames=usernames,
         original_role=req.original_role,
         original_tier=req.original_tier,
+        university=req.university,
+        summary_profile=req.summary_profile,
     )
 
     # result is None only if backend name was invalid or a fatal error occurred
@@ -286,16 +281,25 @@ async def evaluate(req: EvaluateRequest):
         "initiative", "risk_indicators", "role_domain_relevance",
     ]
     dimensions = {k: scores.get(k, 0) for k in dim_keys}
+    # AI returns a list of dimension keys it judged the summary_profile fits,
+    # e.g. ["team_orientation", "stability"]. Filter to only known keys so a
+    # stray/invalid value from the model can't leak into the DB or response.
+    culture_fit_dimensions = [
+        d for d in scores.get("culture_fit_dimensions", []) if d in CULTURE_DIMENSIONS
+    ]
     reasoning  = scores.get("reasoning", {})
 
-    # Extract source URLs — dynamic, covers all role-based platforms
-    _all_source_keys = [
-        "github","linkedin","google_scholar","researchgate","kaggle","devto","medium","hashnode",
-        "instagram","tiktok","meta_ad_library","similarweb",
-        "shrm","cipd","glassdoor","ssm_acra","sc_mq",
-        "behance","dribbble",
-    ]
-    source_urls = {k: sources.get(k, {}).get("profile_url") for k in _all_source_keys}
+    # Extract source URLs
+    source_urls = {
+        "github":         sources.get("github",         {}).get("profile_url"),
+        "linkedin":       sources.get("linkedin",       {}).get("profile_url"),
+        "google_scholar": sources.get("google_scholar", {}).get("profile_url"),
+        "researchgate":   sources.get("researchgate",   {}).get("profile_url"),
+        "kaggle":         sources.get("kaggle",         {}).get("profile_url"),
+        "devto":          sources.get("devto",          {}).get("profile_url"),
+        "medium":         sources.get("medium",         {}).get("profile_url"),
+        "hashnode":       sources.get("hashnode",       {}).get("profile_url"),
+    }
 
     source_details = {
         key: {
@@ -328,8 +332,11 @@ async def evaluate(req: EvaluateRequest):
         candidate_name=req.candidate_name,
         original_role=req.original_role,
         original_tier=req.original_tier,
+        university=req.university,
+        summary_profile=req.summary_profile,
         rescoring_score=result["rescoring_score"],
         dimensions=DimensionScores(**dimensions),
+        culture_fit_dimensions=culture_fit_dimensions,
         reasoning=reasoning,
         source_urls=SourceURLs(**source_urls),
         source_details=source_details,
@@ -349,6 +356,38 @@ def list_candidates():
     return get_all_candidates()
 
 
+@app.get("/candidates/prioritized", response_model=list[TalentRadarCandidate], tags=["Candidates"])
+def list_candidates_prioritized():
+    """Talent Radar view: candidates matching HR's preferred universities
+    and/or selected culture dimensions (set on the Preferences page) are
+    surfaced first. Each candidate carries university_match /
+    matched_culture_dimensions so the boost is visible, not a hidden
+    reshuffle of the score. Within each group (matched vs. not), the
+    existing role_domain_relevance ordering is preserved."""
+    candidates = get_all_candidates()
+    preferred_unis = {u["name"].strip().lower() for u in get_preferred_universities()}
+    culture_prefs = get_culture_preferences()
+    selected_dims = {dim for dim, on in culture_prefs.items() if on}
+
+    annotated = []
+    for c in candidates:
+        uni = (c.get("university") or "").strip().lower()
+        university_match = bool(uni) and uni in preferred_unis
+        matched_dims = [d for d in c.get("culture_fit_dimensions", []) if d in selected_dims]
+        annotated.append({
+            **c,
+            "university_match": university_match,
+            "matched_culture_dimensions": matched_dims,
+            "preference_match": university_match or bool(matched_dims),
+        })
+
+    # Stable sort: preference matches float to the top; get_all_candidates()
+    # already orders by role_domain_relevance DESC, and Python's sort is
+    # stable, so that ordering is preserved within each group.
+    annotated.sort(key=lambda c: not c["preference_match"])
+    return annotated
+
+
 @app.get("/candidates/{candidate_id}", response_model=CandidateRow, tags=["Candidates"])
 def get_candidate(candidate_id: int):
     """Return a single candidate by DB id."""
@@ -356,6 +395,57 @@ def get_candidate(candidate_id: int):
     if not row:
         raise HTTPException(status_code=404, detail=f"Candidate id={candidate_id} not found.")
     return row
+
+
+# ──────────────────────────────────────────────────────────
+# PREFERENCES  (HR settings — culture dimensions + preferred universities)
+# ──────────────────────────────────────────────────────────
+
+@app.get("/preferences/culture", tags=["Preferences"])
+def get_culture_prefs():
+    """Return {dimension: bool} for all 7 culture dimensions — which ones
+    HR has selected as relevant via the chip multi-select."""
+    return get_culture_preferences()
+
+
+@app.put("/preferences/culture", tags=["Preferences"])
+def update_culture_prefs(body: CulturePreferencesUpdate):
+    """Overwrite HR's culture dimension selection.
+    body.selected: list of dimension keys that should be ON."""
+    unknown = [d for d in body.selected if d not in CULTURE_DIMENSIONS]
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown culture dimension(s): {unknown}. Valid: {CULTURE_DIMENSIONS}"
+        )
+    set_culture_preferences(body.selected)
+    return get_culture_preferences()
+
+
+@app.get("/preferences/universities", response_model=list[PreferredUniversityRow], tags=["Preferences"])
+def list_preferred_universities():
+    """Return all preferred universities, alphabetically."""
+    return get_preferred_universities()
+
+
+@app.post("/preferences/universities", response_model=PreferredUniversityRow, tags=["Preferences"])
+def create_preferred_university(body: NewUniversity):
+    """Add a preferred university."""
+    if not body.name.strip():
+        raise HTTPException(status_code=400, detail="University name cannot be empty.")
+    new_id = add_preferred_university(body.name)
+    if new_id is None:
+        raise HTTPException(status_code=409, detail=f"'{body.name}' is already in the preferred list.")
+    return {"id": new_id, "name": body.name.strip(), "created_at": ""}
+
+
+@app.delete("/preferences/universities/{university_id}", tags=["Preferences"])
+def remove_preferred_university(university_id: int):
+    """Remove a preferred university by id."""
+    deleted = delete_preferred_university(university_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"University id={university_id} not found.")
+    return {"status": "ok", "deleted_id": university_id}
 
 
 # ──────────────────────────────────────────────────────────

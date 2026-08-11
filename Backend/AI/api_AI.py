@@ -329,7 +329,36 @@ def call_openrouter(prompt: str) -> dict:
         "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": SCORING_SYSTEM_PROMPT},
-            {"role": "user",   "content": prompt},
+            {"role": "user",   "content": prompt + """
+
+IMPORTANT: You MUST respond with ONLY a valid JSON object matching this exact structure (no extra text, no markdown):
+{
+  "technical_competency": <integer 0-100>,
+  "problem_solving": <integer 0-100>,
+  "communication": <integer 0-100>,
+  "career_stability": <integer 0-100>,
+  "company_exposure": <integer 0-100>,
+  "academic_signal": <integer 0-100>,
+  "initiative": <integer 0-100>,
+  "risk_indicators": <integer 0-100>,
+  "role_domain_relevance": <integer 0-100>,
+  "reasoning": {
+    "technical_competency": "<one sentence>",
+    "problem_solving": "<one sentence>",
+    "communication": "<one sentence>",
+    "career_stability": "<one sentence>",
+    "company_exposure": "<one sentence>",
+    "academic_signal": "<one sentence>",
+    "initiative": "<one sentence>",
+    "risk_indicators": "<one sentence>",
+    "role_domain_relevance": "<one sentence>"
+  },
+  "fit_direction": "<improved|declined|unchanged>",
+  "whats_changed_summary": "<plain English summary>",
+  "re_engage_flag": <true|false>,
+  "status": "<Active opportunity|Re-engage|Watch|Faded>",
+  "culture_fit_dimensions": []
+}"""},
         ],
     }
     headers = {
@@ -387,19 +416,56 @@ def call_ollama(prompt: str) -> dict:
         "model": OLLAMA_MODEL,
         "stream": False,
         "format": "json",
-        "options": {"temperature": 0.1, "num_predict": 2048},
+        "options": {
+            "temperature": 0.1,
+            "num_predict": 8192,
+            "num_ctx": 16384,
+        },
         "messages": [
             {"role": "system", "content": SCORING_SYSTEM_PROMPT},
-            {"role": "user",   "content": prompt},
+            {"role": "user",   "content": prompt + """
+
+IMPORTANT: You MUST respond with ONLY a valid JSON object matching this exact structure (no extra text, no markdown):
+{
+  "technical_competency": <integer 0-100>,
+  "problem_solving": <integer 0-100>,
+  "communication": <integer 0-100>,
+  "career_stability": <integer 0-100>,
+  "company_exposure": <integer 0-100>,
+  "academic_signal": <integer 0-100>,
+  "initiative": <integer 0-100>,
+  "risk_indicators": <integer 0-100>,
+  "role_domain_relevance": <integer 0-100>,
+  "reasoning": {
+    "technical_competency": "<one sentence>",
+    "problem_solving": "<one sentence>",
+    "communication": "<one sentence>",
+    "career_stability": "<one sentence>",
+    "company_exposure": "<one sentence>",
+    "academic_signal": "<one sentence>",
+    "initiative": "<one sentence>",
+    "risk_indicators": "<one sentence>",
+    "role_domain_relevance": "<one sentence>"
+  },
+  "fit_direction": "<improved|declined|unchanged>",
+  "whats_changed_summary": "<plain English summary>",
+  "re_engage_flag": <true|false>,
+  "status": "<Active opportunity|Re-engage|Watch|Faded>",
+  "culture_fit_dimensions": []
+}"""},
         ],
     }
     try:
-        r = requests.post(url, json=payload, timeout=300)
+        r = requests.post(url, json=payload, timeout=600)
         r.raise_for_status()
         data = r.json()
         raw_text = data.get("message", {}).get("content", "")
+        print(f"  [Ollama] Response length: {len(raw_text)} chars")
+        if raw_text:
+            print(f"  [Ollama] First 300 chars: {raw_text[:300]}")
         if not raw_text:
             print("  ⚠ Ollama returned empty content")
+            print(f"  [Ollama] Full response keys: {list(data.keys())}")
             return {}
         cleaned = re.sub(r"```(?:json)?\s*|```", "", raw_text).strip()
         return json.loads(cleaned)
