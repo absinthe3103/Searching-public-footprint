@@ -23,6 +23,7 @@ import os
 import requests
 import time
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pydantic import BaseModel, Field
 
 # Ensure Windows terminal encoding errors never crash print statements
@@ -141,58 +142,174 @@ summary profile is provided, return an empty list for culture_fit_dimensions.
 # ──────────────────────────────────────────────────────────
 # STEP 1: Collect candidate data via searcher
 # ──────────────────────────────────────────────────────────
-def collect_candidate_data(candidate_name: str, requirements: list[str],
-                           usernames: dict | None = None) -> tuple[dict, list]:
-    """
-    Import and run the candidate searcher inline.
-    Returns the full sources dict.
 
-    usernames: optional dict of explicit handles, e.g.
-        {"github_username": "octocat", "kaggle_username": "andrewng"}
-    When a platform username is provided it is tried directly first,
-    bypassing the full-name search for that platform.
+# ──────────────────────────────────────────────────────────
+# ROLE → PLATFORM MAPPING
+# ──────────────────────────────────────────────────────────
+ROLE_PLATFORM_MAP: dict[str, list[tuple[str, str, str | None]]] = {
+    "it": [
+        ("github",         "search_github",         "github_username"),
+        ("linkedin",       "search_linkedin",        "linkedin_username"),
+        ("google_scholar", "search_google_scholar",  "google_scholar_identifier"),
+        ("researchgate",   "search_researchgate",    "researchgate_identifier"),
+        ("kaggle",         "search_kaggle",          "kaggle_username"),
+        ("devto",          "search_devto",           "devto_username"),
+        ("medium",         "search_medium",          "medium_username"),
+        ("hashnode",       "search_hashnode",        "hashnode_username"),
+    ],
+    "marketing": [
+        ("linkedin",        "search_linkedin",        "linkedin_username"),
+        ("instagram",       "search_instagram",       "instagram_username"),
+        ("tiktok",          "search_tiktok",          "tiktok_username"),
+        ("meta_ad_library", "search_meta_ad_library", "meta_ad_page"),
+        ("similarweb",      "search_similarweb",      "similarweb_domain"),
+        ("medium",          "search_medium",          "medium_username"),
+    ],
+    "hr": [
+        ("linkedin",  "search_linkedin",          "linkedin_username"),
+        ("shrm",      "search_shrm",              "shrm_identifier"),
+        ("cipd",      "search_cipd",              "cipd_identifier"),
+        ("glassdoor", "search_glassdoor_employer", "glassdoor_employer"),
+        ("ssm_acra",  "search_ssm_acra",          "company_identifier"),
+        ("medium",    "search_medium",            "medium_username"),
+    ],
+    "design": [
+        ("linkedin",  "search_linkedin",  "linkedin_username"),
+        ("behance",   "search_behance",   "behance_username"),
+        ("dribbble",  "search_dribbble",  "dribbble_username"),
+        ("github",    "search_github",    "github_username"),
+        ("medium",    "search_medium",    "medium_username"),
+    ],
+    "finance": [
+        ("linkedin",  "search_linkedin",          "linkedin_username"),
+        ("google_scholar", "search_google_scholar","google_scholar_identifier"),
+        ("sc_mq",     "search_sc_mq",             "finance_license_identifier"),
+        ("glassdoor", "search_glassdoor_employer", "glassdoor_employer"),
+        ("ssm_acra",  "search_ssm_acra",          "company_identifier"),
+    ],
+    "research": [
+        ("linkedin",       "search_linkedin",        "linkedin_username"),
+        ("google_scholar", "search_google_scholar",  "google_scholar_identifier"),
+        ("researchgate",   "search_researchgate",    "researchgate_identifier"),
+        ("github",         "search_github",          "github_username"),
+        ("medium",         "search_medium",          "medium_username"),
+    ],
+}
+
+ROLE_KEYWORDS: dict[str, list[str]] = {
+    "marketing": ["marketing","social media","instagram","tiktok","facebook","brand","campaign","content","influencer","ads","digital marketing","seo","sem","growth","engagement"],
+    "hr":        ["hr","human resource","recruitment","talent","payroll","cipd","shrm","people operations","training","organisational","labor","labour","hris"],
+    "design":    ["design","ui","ux","graphic","figma","sketch","adobe","creative","visual","motion","branding","product design"],
+    "finance":   ["finance","accounting","audit","cfa","acca","investment","banking","risk","compliance","treasury","financial planning"],
+    "research":  ["research","phd","academia","publication","journal","ieee","acm","scholar","laboratory","experiment"],
+    "it":        ["software","engineering","developer","python","java","react","cloud","devops","backend","frontend","fullstack","data science","machine learning","ai","cybersecurity","network","system","aws","node"],
+}
+
+
+def detect_role_domain(original_role: str, requirements: list[str]) -> str:
+    """
+    Returns the role domain key by scoring role string and requirements.
+    original_role is weighted 3x heavier than requirements so an explicit
+    role title (e.g. "HR") always wins over incidental skill keywords (e.g. React).
+    Defaults to 'it' if no clear match.
+    """
+    role_text = original_role.lower()
+    req_text  = " ".join(requirements).lower()
+
+    scores = {domain: 0 for domain in ROLE_KEYWORDS}
+    for domain, kws in ROLE_KEYWORDS.items():
+        for kw in kws:
+            if kw in role_text:
+                scores[domain] += 3   # role title — high weight
+            if kw in req_text:
+                scores[domain] += 1   # requirement — low weight
+
+    best = max(scores, key=scores.get)
+    best_score = scores[best]
+    if best_score == 0:
+        return "it"
+    print(f"  Role detected: '{best}' (score={best_score})")
+    return best
+
+
+def collect_candidate_data(candidate_name: str, requirements: list[str],
+                           usernames: dict | None = None,
+                           original_role: str = "") -> tuple[dict, list]:
+    """
+    Collect public profile data. Platforms are selected based on detected role domain:
+      IT        → GitHub, LinkedIn, Scholar, Kaggle, Dev.to, Medium, Hashnode
+      Marketing → LinkedIn, Instagram, TikTok, Meta Ad Library, Similarweb, Medium
+      HR        → LinkedIn, SHRM, CIPD, Glassdoor, SSM/ACRA, Medium
+      Design    → LinkedIn, Behance, Dribbble, GitHub, Medium
+      Finance   → LinkedIn, Scholar, SC/MQ, Glassdoor, SSM/ACRA
+      Research  → LinkedIn, Scholar, ResearchGate, GitHub, Medium
     """
     print(f"\n{'='*60}")
     print(f"  STEP 1 — Collecting public profile data")
     print(f"{'='*60}")
 
-    # Import searcher functions
     from candidateSearcher import (
         search_github, search_linkedin, search_google_scholar,
         search_researchgate, search_kaggle, search_devto,
-        search_medium, search_hashnode, STOP
+        search_medium, search_hashnode,
+        search_instagram, search_tiktok, search_meta_ad_library, search_similarweb,
+        search_shrm, search_cipd, search_glassdoor_employer, search_ssm_acra,
+        search_behance, search_dribbble, search_sc_mq,
+        STOP
     )
 
-    # Extract keywords from requirements
+    fn_registry = {
+        "search_github": search_github, "search_linkedin": search_linkedin,
+        "search_google_scholar": search_google_scholar, "search_researchgate": search_researchgate,
+        "search_kaggle": search_kaggle, "search_devto": search_devto,
+        "search_medium": search_medium, "search_hashnode": search_hashnode,
+        "search_instagram": search_instagram, "search_tiktok": search_tiktok,
+        "search_meta_ad_library": search_meta_ad_library, "search_similarweb": search_similarweb,
+        "search_shrm": search_shrm, "search_cipd": search_cipd,
+        "search_glassdoor_employer": search_glassdoor_employer, "search_ssm_acra": search_ssm_acra,
+        "search_behance": search_behance, "search_dribbble": search_dribbble,
+        "search_sc_mq": search_sc_mq,
+    }
+
     kws = []
     for req in requirements:
-        for w in re.split(r"[\s,/+()\-]+", req.lower()):
+        for w in re.split(r"[\s,/+()\.\-]+", req.lower()):
             if w and w not in STOP and len(w) > 2:
                 kws.append(w)
     kws = list(dict.fromkeys(kws))
     print(f"  Keywords: {kws}\n")
 
     u = usernames or {}
+    role_domain  = detect_role_domain(original_role, requirements)
+    platform_spec = ROLE_PLATFORM_MAP.get(role_domain, ROLE_PLATFORM_MAP["it"])
+    print(f"  Platforms for '{role_domain}': {[p[0] for p in platform_spec]}\n")
 
-    # Pass each platform's username as the 'identifier' argument.
-    # The individual search_* functions already implement the logic:
-    #   if identifier given → try it directly first, skip name-based guess.
-    sources = {}
-    sources["github"]         = search_github(candidate_name, kws, u.get("github_username"));     time.sleep(1.2)
-    sources["linkedin"]       = search_linkedin(candidate_name, kws, u.get("linkedin_username")); time.sleep(1.2)
-    sources["google_scholar"] = search_google_scholar(candidate_name, kws, u.get("google_scholar_identifier")); time.sleep(1.2)
-    sources["researchgate"]   = search_researchgate(candidate_name, kws, u.get("researchgate_identifier"));   time.sleep(1.2)
-    sources["kaggle"]         = search_kaggle(candidate_name, kws, u.get("kaggle_username"));     time.sleep(1.2)
-    sources["devto"]          = search_devto(candidate_name, kws, u.get("devto_username"));       time.sleep(1.2)
-    sources["medium"]         = search_medium(candidate_name, kws, u.get("medium_username"));     time.sleep(1.2)
-    sources["hashnode"]       = search_hashnode(candidate_name, kws, u.get("hashnode_username"))
+    platform_tasks: dict[str, tuple] = {}
+    for source_key, fn_name, username_key in platform_spec:
+        fn = fn_registry.get(fn_name)
+        if fn is None:
+            print(f"  ⚠ No function for '{fn_name}' — skipping")
+            continue
+        identifier = u.get(username_key) if username_key else None
+        platform_tasks[source_key] = (fn, candidate_name, kws, identifier)
+
+    sources: dict = {}
+    with ThreadPoolExecutor(max_workers=max(1, len(platform_tasks))) as executor:
+        future_to_platform = {
+            executor.submit(fn, *args): source_key
+            for source_key, (fn, *args) in platform_tasks.items()
+        }
+        for future in as_completed(future_to_platform):
+            source_key = future_to_platform[future]
+            try:
+                sources[source_key] = future.result()
+            except Exception as exc:
+                print(f"  ⚠ [{source_key}] exception: {exc}")
+                sources[source_key] = {"summary": f"Error: {exc}", "profile_url": None, "keyword_hits": {}}
 
     return sources, kws
 
 
-# ──────────────────────────────────────────────────────────
-# STEP 2: Build AI prompt from collected data
-# ──────────────────────────────────────────────────────────
 def build_prompt(candidate_name: str, requirements: list[str],
                  sources: dict, kws: list[str], 
                  original_role: str = "", original_tier: str = "",
@@ -307,6 +424,183 @@ def call_gemini(prompt: str) -> dict:
         return {}
 
 
+def call_openrouter(prompt: str) -> dict:
+    """
+    Send prompt to OpenRouter API — access to 100+ models (DeepSeek, Claude, GPT-4o, etc.)
+    Configure via .env:
+        OPENROUTER_API_KEY=your_key_here
+        OPENROUTER_MODEL=deepseek/deepseek-v4-flash
+    Browse models: https://openrouter.ai/models
+    """
+    print(f"\n{'='*60}")
+    print(f"  STEP 2 — Sending to OpenRouter ({OPENROUTER_MODEL}) for scoring")
+    print(f"{'='*60}")
+
+    if not OPENROUTER_API_KEY:
+        print("  ⚠ OPENROUTER_API_KEY is not set in .env")
+        return {}
+
+    payload = {
+        "model": OPENROUTER_MODEL,
+        "temperature": 0.1,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": SCORING_SYSTEM_PROMPT},
+            {"role": "user",   "content": prompt + """
+
+IMPORTANT: You MUST respond with ONLY a valid JSON object matching this exact structure (no extra text, no markdown):
+{
+  "technical_competency": <integer 0-100>,
+  "problem_solving": <integer 0-100>,
+  "communication": <integer 0-100>,
+  "career_stability": <integer 0-100>,
+  "company_exposure": <integer 0-100>,
+  "academic_signal": <integer 0-100>,
+  "initiative": <integer 0-100>,
+  "risk_indicators": <integer 0-100>,
+  "role_domain_relevance": <integer 0-100>,
+  "reasoning": {
+    "technical_competency": "<one sentence>",
+    "problem_solving": "<one sentence>",
+    "communication": "<one sentence>",
+    "career_stability": "<one sentence>",
+    "company_exposure": "<one sentence>",
+    "academic_signal": "<one sentence>",
+    "initiative": "<one sentence>",
+    "risk_indicators": "<one sentence>",
+    "role_domain_relevance": "<one sentence>"
+  },
+  "fit_direction": "<improved|declined|unchanged>",
+  "whats_changed_summary": "<plain English summary>",
+  "re_engage_flag": <true|false>,
+  "status": "<Active opportunity|Re-engage|Watch|Faded>",
+  "culture_fit_dimensions": []
+}"""},
+        ],
+    }
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type":  "application/json",
+        "HTTP-Referer":  "https://hiresystem.local",
+        "X-Title":       "HireSystem",
+    }
+    try:
+        r = requests.post(OPENROUTER_API_URL, json=payload, headers=headers, timeout=120)
+        r.raise_for_status()
+        data = r.json()
+        raw_text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        if not raw_text:
+            print("  ⚠ OpenRouter returned empty content")
+            return {}
+        cleaned = re.sub(r"```(?:json)?\s*|```", "", raw_text).strip()
+        return json.loads(cleaned)
+    except requests.exceptions.ConnectionError:
+        print("  ⚠ Cannot connect to OpenRouter — check your internet")
+        return {}
+    except requests.exceptions.Timeout:
+        print("  ⚠ OpenRouter request timed out")
+        return {}
+    except requests.exceptions.HTTPError as e:
+        sc = r.status_code
+        if sc == 401: print("  ⚠ OpenRouter: Invalid API key")
+        elif sc == 402: print("  ⚠ OpenRouter: Insufficient credits")
+        elif sc == 429: print("  ⚠ OpenRouter: Rate limited — try again shortly")
+        else: print(f"  ⚠ OpenRouter HTTP error: {e}")
+        return {}
+    except json.JSONDecodeError as e:
+        print(f"  ⚠ OpenRouter response not valid JSON: {e}")
+        return {}
+    except Exception as e:
+        print(f"  ⚠ OpenRouter error: {e}")
+        return {}
+
+
+def call_ollama(prompt: str) -> dict:
+    """
+    Send prompt to a local Ollama instance.
+    Ollama must be running: ollama serve
+    Model must be pulled:   ollama pull <model>
+    Configure via .env:
+        OLLAMA_BASE_URL=http://localhost:11434
+        OLLAMA_MODEL=qwen2.5:14b
+    """
+    print(f"\n{'='*60}")
+    print(f"  STEP 2 — Sending to Ollama ({OLLAMA_MODEL}) for scoring")
+    print(f"{'='*60}")
+
+    url = f"{OLLAMA_BASE_URL}/api/chat"
+    payload = {
+        "model": OLLAMA_MODEL,
+        "stream": False,
+        "format": "json",
+        "options": {
+            "temperature": 0.1,
+            "num_predict": 8192,
+            "num_ctx": 16384,
+        },
+        "messages": [
+            {"role": "system", "content": SCORING_SYSTEM_PROMPT},
+            {"role": "user",   "content": prompt + """
+
+IMPORTANT: You MUST respond with ONLY a valid JSON object matching this exact structure (no extra text, no markdown):
+{
+  "technical_competency": <integer 0-100>,
+  "problem_solving": <integer 0-100>,
+  "communication": <integer 0-100>,
+  "career_stability": <integer 0-100>,
+  "company_exposure": <integer 0-100>,
+  "academic_signal": <integer 0-100>,
+  "initiative": <integer 0-100>,
+  "risk_indicators": <integer 0-100>,
+  "role_domain_relevance": <integer 0-100>,
+  "reasoning": {
+    "technical_competency": "<one sentence>",
+    "problem_solving": "<one sentence>",
+    "communication": "<one sentence>",
+    "career_stability": "<one sentence>",
+    "company_exposure": "<one sentence>",
+    "academic_signal": "<one sentence>",
+    "initiative": "<one sentence>",
+    "risk_indicators": "<one sentence>",
+    "role_domain_relevance": "<one sentence>"
+  },
+  "fit_direction": "<improved|declined|unchanged>",
+  "whats_changed_summary": "<plain English summary>",
+  "re_engage_flag": <true|false>,
+  "status": "<Active opportunity|Re-engage|Watch|Faded>",
+  "culture_fit_dimensions": []
+}"""},
+        ],
+    }
+    try:
+        r = requests.post(url, json=payload, timeout=600)
+        r.raise_for_status()
+        data = r.json()
+        raw_text = data.get("message", {}).get("content", "")
+        print(f"  [Ollama] Response length: {len(raw_text)} chars")
+        if raw_text:
+            print(f"  [Ollama] First 300 chars: {raw_text[:300]}")
+        if not raw_text:
+            print("  ⚠ Ollama returned empty content")
+            print(f"  [Ollama] Full response keys: {list(data.keys())}")
+            return {}
+        cleaned = re.sub(r"```(?:json)?\s*|```", "", raw_text).strip()
+        return json.loads(cleaned)
+    except requests.exceptions.ConnectionError:
+        print(f"  ⚠ Cannot connect to Ollama at {OLLAMA_BASE_URL}")
+        print("    Make sure Ollama is running: ollama serve")
+        return {}
+    except requests.exceptions.Timeout:
+        print("  ⚠ Ollama request timed out (model may be slow)")
+        return {}
+    except json.JSONDecodeError as e:
+        print(f"  ⚠ Ollama response not valid JSON: {e}")
+        return {}
+    except Exception as e:
+        print(f"  ⚠ Ollama error: {e}")
+        return {}
+
+
 def evaluate_candidate(candidate_name: str, requirements: list[str],
                        backend: str = "gemini",
                        usernames: dict | None = None,
@@ -324,7 +618,7 @@ def evaluate_candidate(candidate_name: str, requirements: list[str],
         return None
 
     # 1. Search profiles
-    sources, kws = collect_candidate_data(candidate_name, requirements, usernames)
+    sources, kws = collect_candidate_data(candidate_name, requirements, usernames, original_role=original_role)
     if not any(sources.values()):
         print("⚠ No profiles found across any platform. Aborting.")
         return None
@@ -333,8 +627,16 @@ def evaluate_candidate(candidate_name: str, requirements: list[str],
     prompt = build_prompt(candidate_name, requirements, sources, kws,
                           original_role, original_tier, university, summary_profile)
 
-    # 3. Call AI
-    scores = call_gemini(prompt)
+    # 3. Route to correct AI backend
+    if backend == "ollama":
+        scores = call_ollama(prompt)
+    elif backend == "openrouter":
+        scores = call_openrouter(prompt)
+    elif backend == "gemini":
+        scores = call_gemini(prompt)
+    else:
+        print(f"  ⚠ Unknown backend '{backend}', falling back to gemini")
+        scores = call_gemini(prompt)
 
     scoring_failed = False
     if not scores:
@@ -411,9 +713,9 @@ if __name__ == "__main__":
     print("   HIRE SYSTEM — AI CANDIDATE EVALUATOR")
     print("=" * 60)
 
-    backend = input("\nBackend to use [openrouter/ollama] (default: openrouter): ").strip().lower()
-    if backend not in ("openrouter", "ollama"):
-        backend = "openrouter"
+    backend = input("\nBackend to use [gemini/openrouter/ollama] (default: gemini): ").strip().lower()
+    if backend not in ("gemini", "openrouter", "ollama"):
+        backend = "gemini"
 
     name = input("\nCandidate full name: ").strip()
     if not name:

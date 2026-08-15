@@ -140,11 +140,11 @@ class EvaluateResponse(BaseModel):
     db_id:           int
     scoring_failed:  bool = False
     
-    # Enrichment fields
-    fit_direction:         str
-    whats_changed_summary: str
-    re_engage_flag:        bool
-    status:                str
+    # Enrichment fields — nullable when AI scoring fails
+    fit_direction:         str | None = None
+    whats_changed_summary: str | None = None
+    re_engage_flag:        bool | None = None
+    status:                str | None = None
     possible_profiles:     dict[str, list[str]] = {}
 
 
