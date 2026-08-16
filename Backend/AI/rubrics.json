@@ -1,0 +1,1012 @@
+{
+  "_meta": {
+    "purpose": "Grading rubric for evaluating candidates' resumes and public footprint (GitHub, blog, LinkedIn, Kaggle, etc.) per job position.",
+    "scoring_bands": {
+      "90-100": "Exceptional / clear standout evidence",
+      "70-89": "Solid / competent, meets role expectations",
+      "50-69": "Adequate / basic evidence, some gaps",
+      "30-49": "Weak / minimal or vague evidence",
+      "0-29": "Absent or contradicted by evidence"
+    },
+    "dimension_notes": {
+      "technical_competency": "Role-specific: depth of hard/technical skills relevant to the position.",
+      "problem_solving": "Role-specific: evidence of tackling non-trivial technical problems in that domain.",
+      "communication": "Universal: clarity of writing (README, docs, articles), ability to explain technical concepts, quality of resume narrative.",
+      "career_stability": "Universal: tenure patterns, frequency of job changes, unexplained gaps, progression logic.",
+      "company_exposure": "Universal (lightly role-flavored): caliber, scale, and relevance of past employers.",
+      "academic_signal": "Universal (lightly role-flavored): relevance and strength of formal education, certifications, coursework.",
+      "initiative": "Universal: self-driven learning, side projects, open-source contributions, competitions, community involvement.",
+      "risk_indicators": "Universal, INVERTED scale \u2014 higher score = LOWER risk. Captures red flags: fabrication, plagiarism, erratic job hopping, inconsistent claims, inactivity, unexplained employment gaps, unprofessional public conduct.",
+      "role_domain_relevance": "Role-specific: how much of the candidate's demonstrated work/portfolio actually sits inside this role's domain."
+    }
+  },
+  "rubric": {
+    "IT": {
+      "Back-end Developer": {
+        "technical_competency": {
+          "90-100": "Demonstrates mastery of server-side languages (Python, Go, Node.js, Java), database architecture (SQL/NoSQL), microservices, API design, and strong CI/CD automation.",
+          "70-89": "Solid understanding of backend frameworks and database operations, but lacks advanced system design or automation.",
+          "50-69": "Can build basic REST endpoints and use an ORM, but shows limited grasp of scalability, security, or data modeling.",
+          "30-49": "Only exposure via tutorials/bootcamp projects; no evidence of independent backend architecture decisions.",
+          "0-29": "No credible evidence of backend skills, or claims are inconsistent with any visible code/projects."
+        },
+        "problem_solving": {
+          "90-100": "Evidence of solving complex scalability, concurrency, distributed-systems, or performance bottleneck problems (e.g. caching strategy, queueing, sharding).",
+          "70-89": "Can implement standard CRUD features and resolve typical bugs; some evidence of optimizing queries or fixing production issues.",
+          "50-69": "Solves problems only at tutorial/toy-project complexity; little evidence of debugging real systems.",
+          "30-49": "Minimal problem-solving evidence; mostly boilerplate or copied code patterns.",
+          "0-29": "No evidence of independent problem-solving ability."
+        },
+        "communication": {
+          "90-100": "Writes clear, well-structured READMEs/technical docs/API specs; may have published articles explaining backend concepts; resume clearly narrates technical decisions and impact.",
+          "70-89": "Adequate documentation on projects; resume is clear but light on explaining trade-offs or decisions.",
+          "50-69": "Sparse documentation; resume is generic/templated with little technical narrative.",
+          "30-49": "Minimal or confusing documentation; unclear resume descriptions.",
+          "0-29": "No documentation, or communication is incoherent/contradictory."
+        },
+        "career_stability": {
+          "90-100": "Clear, logical career progression with tenures typically 2+ years per role and sensible reasons for transitions.",
+          "70-89": "Mostly stable history with one or two shorter stints that have plausible explanations.",
+          "50-69": "Mixed pattern: some short tenures (<1 year) without clear explanation, or one unexplained gap.",
+          "30-49": "Frequent job-hopping (multiple <1 year roles) or multiple unexplained gaps.",
+          "0-29": "Highly erratic history, chronic short tenures, or unexplained long gaps with no context."
+        },
+        "company_exposure": {
+          "90-100": "Experience at well-known, engineering-strong companies (large-scale tech companies, high-growth startups with strong backend/infra needs) in relevant backend/infra roles.",
+          "70-89": "Experience at reputable mid-size companies or startups with legitimate engineering functions.",
+          "50-69": "Experience mostly at small/unknown companies or in generalist/non-engineering-heavy roles.",
+          "30-49": "Very limited or unclear company exposure; roles not clearly technical.",
+          "0-29": "No verifiable company exposure, or roles unrelated to software engineering."
+        },
+        "academic_signal": {
+          "90-100": "Degree in CS/Software Engineering/related field from a recognized institution, and/or strong relevant certifications (cloud, databases, systems design).",
+          "70-89": "Relevant degree from a lesser-known institution, or unrelated degree plus solid relevant certifications.",
+          "50-69": "Unrelated degree with minimal relevant coursework/certification.",
+          "30-49": "No formal degree; only short/basic online courses.",
+          "0-29": "No academic signal at all, or credentials appear unverifiable/fabricated."
+        },
+        "initiative": {
+          "90-100": "Active open-source contributions, personal backend/infra side projects, blog posts, or participation in relevant hackathons/competitions.",
+          "70-89": "Some side projects or occasional contributions, but not sustained.",
+          "50-69": "A couple of forked/copied repos with minimal original work.",
+          "30-49": "Barely any public activity beyond required coursework/job tasks.",
+          "0-29": "No initiative evidence at all; entirely passive profile."
+        },
+        "risk_indicators": {
+          "90-100": "No red flags: consistent story across resume/LinkedIn/GitHub, active and authentic public presence, no plagiarism or fabricated claims.",
+          "70-89": "Minor inconsistencies (e.g. slightly mismatched dates) but nothing concerning.",
+          "50-69": "Some inactivity or thin public footprint that makes claims hard to verify.",
+          "30-49": "Noticeable inconsistencies between resume and public profiles, copied portfolio content, or unexplained gaps.",
+          "0-29": "Clear red flags: fabricated experience, plagiarized code/projects, contradictory claims, or unprofessional conduct visible publicly."
+        },
+        "role_domain_relevance": {
+          "90-100": "Extensive backend-focused repositories, contributions to backend open source, or technical articles about server infrastructure.",
+          "70-89": "Several backend-related projects, though mixed with unrelated (e.g. frontend/mobile) work.",
+          "50-69": "A small amount of backend work amid a mostly unrelated portfolio.",
+          "30-49": "Backend work is incidental or superficial (e.g. one small script).",
+          "0-29": "No visible backend-related work at all."
+        }
+      },
+      "Front-End Developer": {
+        "technical_competency": {
+          "90-100": "Demonstrates mastery of modern UI frameworks (React, Vue, Angular), state management, responsive design, performance optimization (Core Web Vitals), and accessibility (a11y).",
+          "70-89": "Can build functional interfaces using frameworks but lacks deep optimization or modern architectural patterns.",
+          "50-69": "Builds basic static/interactive pages with limited framework depth or attention to performance/accessibility.",
+          "30-49": "Only tutorial-level exposure to HTML/CSS/JS frameworks; no independent UI architecture.",
+          "0-29": "No credible evidence of frontend skills, or claims contradicted by visible work."
+        },
+        "problem_solving": {
+          "90-100": "Evidence of handling complex client-side state, reducing bundle sizes, building custom reusable component libraries, or solving cross-browser/performance issues.",
+          "70-89": "Can implement standard UI features and fix typical layout/state bugs.",
+          "50-69": "Solves problems only at tutorial/toy-project complexity.",
+          "30-49": "Minimal problem-solving evidence; mostly copied UI templates.",
+          "0-29": "No evidence of independent problem-solving ability."
+        },
+        "communication": {
+          "90-100": "Clear component documentation, storybook/demo sites, or articles on UI/UX and frontend performance; resume clearly narrates design/technical decisions.",
+          "70-89": "Adequate documentation on projects; resume is clear but light on design rationale.",
+          "50-69": "Sparse documentation; generic resume descriptions.",
+          "30-49": "Minimal or confusing documentation.",
+          "0-29": "No documentation, or communication is incoherent/contradictory."
+        },
+        "career_stability": {
+          "90-100": "Clear, logical career progression with tenures typically 2+ years per role and sensible reasons for transitions.",
+          "70-89": "Mostly stable history with one or two shorter stints that have plausible explanations.",
+          "50-69": "Mixed pattern: some short tenures (<1 year) without clear explanation, or one unexplained gap.",
+          "30-49": "Frequent job-hopping (multiple <1 year roles) or multiple unexplained gaps.",
+          "0-29": "Highly erratic history, chronic short tenures, or unexplained long gaps with no context."
+        },
+        "company_exposure": {
+          "90-100": "Experience at companies known for strong design/product culture or high-traffic consumer products, in clearly frontend/UI roles.",
+          "70-89": "Experience at reputable mid-size companies or startups with legitimate product/UI functions.",
+          "50-69": "Experience mostly at small/unknown companies or in generalist roles.",
+          "30-49": "Very limited or unclear company exposure; roles not clearly technical/UI-focused.",
+          "0-29": "No verifiable company exposure, or roles unrelated to frontend/product development."
+        },
+        "academic_signal": {
+          "90-100": "Degree in CS/HCI/Design-related field from a recognized institution, and/or strong relevant certifications (UI frameworks, accessibility, UX).",
+          "70-89": "Relevant degree from a lesser-known institution, or unrelated degree plus solid relevant certifications.",
+          "50-69": "Unrelated degree with minimal relevant coursework/certification.",
+          "30-49": "No formal degree; only short/basic online courses.",
+          "0-29": "No academic signal at all, or credentials appear unverifiable/fabricated."
+        },
+        "initiative": {
+          "90-100": "Active open-source contributions, personal UI side projects/demos, design/dev blog, or hackathon participation.",
+          "70-89": "Some side projects or occasional contributions, but not sustained.",
+          "50-69": "A couple of forked/copied repos with minimal original work.",
+          "30-49": "Barely any public activity beyond required coursework/job tasks.",
+          "0-29": "No initiative evidence at all; entirely passive profile."
+        },
+        "risk_indicators": {
+          "90-100": "No red flags: consistent story across resume/LinkedIn/GitHub/portfolio site, authentic public presence, no plagiarism or fabricated claims.",
+          "70-89": "Minor inconsistencies but nothing concerning.",
+          "50-69": "Some inactivity or thin public footprint that makes claims hard to verify.",
+          "30-49": "Noticeable inconsistencies between resume and public profiles, copied portfolio/demo content, or unexplained gaps.",
+          "0-29": "Clear red flags: fabricated experience, plagiarized designs/code, contradictory claims, or unprofessional public conduct."
+        },
+        "role_domain_relevance": {
+          "90-100": "Extensive UI/UX-focused repositories, interactive web demos, or technical articles about frontend performance.",
+          "70-89": "Several frontend-related projects, though mixed with unrelated (e.g. backend/mobile) work.",
+          "50-69": "A small amount of frontend work amid a mostly unrelated portfolio.",
+          "30-49": "Frontend work is incidental or superficial (e.g. one static page).",
+          "0-29": "No visible frontend-related work at all."
+        }
+      },
+      "Software Engineer": {
+        "technical_competency": {
+          "90-100": "Demonstrates strong full-stack capabilities, clean code architecture (SOLID), testing practices (TDD), and cloud deployments.",
+          "70-89": "Can write functional code and deploy basic applications, but lacks rigorous testing or architectural maturity.",
+          "50-69": "Builds working small applications but with limited attention to structure, testing, or deployment.",
+          "30-49": "Only tutorial-level coding exposure; no evidence of independently shipping a working application.",
+          "0-29": "No credible evidence of software engineering skills, or claims contradicted by visible work."
+        },
+        "problem_solving": {
+          "90-100": "Evidence of end-to-end feature delivery involving both complex logic and infrastructure decisions (e.g. deployment, data modeling, integration).",
+          "70-89": "Can build and ship moderately complex features across the stack, resolving typical bugs.",
+          "50-69": "Solves problems only at tutorial/toy-project complexity.",
+          "30-49": "Minimal problem-solving evidence; mostly copied templates/boilerplate.",
+          "0-29": "No evidence of independent problem-solving ability."
+        },
+        "communication": {
+          "90-100": "Clear, well-structured project documentation and READMEs, possibly technical writing/blog posts; resume clearly narrates technical decisions and business impact.",
+          "70-89": "Adequate documentation on projects; resume is clear but light on explaining trade-offs.",
+          "50-69": "Sparse documentation; generic resume descriptions.",
+          "30-49": "Minimal or confusing documentation.",
+          "0-29": "No documentation, or communication is incoherent/contradictory."
+        },
+        "career_stability": {
+          "90-100": "Clear, logical career progression with tenures typically 2+ years per role and sensible reasons for transitions.",
+          "70-89": "Mostly stable history with one or two shorter stints that have plausible explanations.",
+          "50-69": "Mixed pattern: some short tenures (<1 year) without clear explanation, or one unexplained gap.",
+          "30-49": "Frequent job-hopping (multiple <1 year roles) or multiple unexplained gaps.",
+          "0-29": "Highly erratic history, chronic short tenures, or unexplained long gaps with no context."
+        },
+        "company_exposure": {
+          "90-100": "Experience at well-known or high-growth engineering companies in clearly software engineering roles.",
+          "70-89": "Experience at reputable mid-size companies or startups with legitimate engineering functions.",
+          "50-69": "Experience mostly at small/unknown companies or in generalist/non-engineering-heavy roles.",
+          "30-49": "Very limited or unclear company exposure; roles not clearly technical.",
+          "0-29": "No verifiable company exposure, or roles unrelated to software engineering."
+        },
+        "academic_signal": {
+          "90-100": "Degree in CS/Software Engineering/related field from a recognized institution, and/or strong relevant certifications (cloud, systems design, testing).",
+          "70-89": "Relevant degree from a lesser-known institution, or unrelated degree plus solid relevant certifications.",
+          "50-69": "Unrelated degree with minimal relevant coursework/certification.",
+          "30-49": "No formal degree; only short/basic online courses.",
+          "0-29": "No academic signal at all, or credentials appear unverifiable/fabricated."
+        },
+        "initiative": {
+          "90-100": "Active open-source contributions, personal full-stack side projects deployed live, blog posts, or hackathon participation.",
+          "70-89": "Some side projects or occasional contributions, but not sustained.",
+          "50-69": "A couple of forked/copied repos with minimal original work.",
+          "30-49": "Barely any public activity beyond required coursework/job tasks.",
+          "0-29": "No initiative evidence at all; entirely passive profile."
+        },
+        "risk_indicators": {
+          "90-100": "No red flags: consistent story across resume/LinkedIn/GitHub, active and authentic public presence, no plagiarism or fabricated claims.",
+          "70-89": "Minor inconsistencies but nothing concerning.",
+          "50-69": "Some inactivity or thin public footprint that makes claims hard to verify.",
+          "30-49": "Noticeable inconsistencies between resume and public profiles, copied project content, or unexplained gaps.",
+          "0-29": "Clear red flags: fabricated experience, plagiarized code/projects, contradictory claims, or unprofessional public conduct."
+        },
+        "role_domain_relevance": {
+          "90-100": "Repositories showing complete, deployable applications with both client and server components.",
+          "70-89": "Several full-stack or general software projects, reasonably complete but not fully polished/deployed.",
+          "50-69": "A small amount of general software work amid a mostly unrelated portfolio.",
+          "30-49": "Software work is incidental or superficial (e.g. one small script/exercise).",
+          "0-29": "No visible general software engineering work at all."
+        }
+      },
+      "AI-Engineer": {
+        "technical_competency": {
+          "90-100": "Demonstrates mastery of ML frameworks (PyTorch, TensorFlow), LLM integration/RAG architectures, data pipelines, and MLOps (model deployment/monitoring).",
+          "70-89": "Can train basic models or use APIs, but lacks robust MLOps or advanced architecture knowledge.",
+          "50-69": "Uses pre-built models/APIs with minimal customization; limited understanding of underlying architecture.",
+          "30-49": "Only tutorial-level exposure to ML/AI concepts; no evidence of independent model work.",
+          "0-29": "No credible evidence of AI/ML skills, or claims contradicted by visible work."
+        },
+        "problem_solving": {
+          "90-100": "Evidence of optimizing model inference speed, handling massive datasets, fine-tuning/prompt-engineering at scale, or creating novel AI architectures.",
+          "70-89": "Can apply existing models/frameworks to solve moderately complex problems, with some data preprocessing/evaluation work.",
+          "50-69": "Solves problems only at tutorial/toy-dataset complexity.",
+          "30-49": "Minimal problem-solving evidence; mostly copied notebooks/scripts.",
+          "0-29": "No evidence of independent problem-solving ability."
+        },
+        "communication": {
+          "90-100": "Clear technical write-ups (papers, blog posts, model cards), well-documented notebooks/repos; resume clearly narrates model choices, trade-offs, and impact.",
+          "70-89": "Adequate documentation on projects; resume is clear but light on explaining methodology.",
+          "50-69": "Sparse documentation; generic resume descriptions.",
+          "30-49": "Minimal or confusing documentation.",
+          "0-29": "No documentation, or communication is incoherent/contradictory."
+        },
+        "career_stability": {
+          "90-100": "Clear, logical career progression with tenures typically 2+ years per role and sensible reasons for transitions.",
+          "70-89": "Mostly stable history with one or two shorter stints that have plausible explanations.",
+          "50-69": "Mixed pattern: some short tenures (<1 year) without clear explanation, or one unexplained gap.",
+          "30-49": "Frequent job-hopping (multiple <1 year roles) or multiple unexplained gaps.",
+          "0-29": "Highly erratic history, chronic short tenures, or unexplained long gaps with no context."
+        },
+        "company_exposure": {
+          "90-100": "Experience at companies known for strong AI/ML/data science functions (AI-first companies, research labs, or large tech companies' ML teams).",
+          "70-89": "Experience at reputable mid-size companies or startups with legitimate data/ML functions.",
+          "50-69": "Experience mostly at small/unknown companies or in generalist roles with minimal ML focus.",
+          "30-49": "Very limited or unclear company exposure; roles not clearly AI/ML-focused.",
+          "0-29": "No verifiable company exposure, or roles unrelated to AI/ML/data."
+        },
+        "academic_signal": {
+          "90-100": "Degree in CS/ML/Data Science/Statistics/related field from a recognized institution, and/or strong relevant certifications or published research.",
+          "70-89": "Relevant degree from a lesser-known institution, or unrelated degree plus solid relevant certifications.",
+          "50-69": "Unrelated degree with minimal relevant coursework/certification.",
+          "30-49": "No formal degree; only short/basic online courses.",
+          "0-29": "No academic signal at all, or credentials appear unverifiable/fabricated."
+        },
+        "initiative": {
+          "90-100": "Active open-source ML contributions, personal AI side projects, Kaggle participation, published research/blog posts, or hackathon participation.",
+          "70-89": "Some side projects or occasional contributions, but not sustained.",
+          "50-69": "A couple of forked/copied notebooks with minimal original work.",
+          "30-49": "Barely any public activity beyond required coursework/job tasks.",
+          "0-29": "No initiative evidence at all; entirely passive profile."
+        },
+        "risk_indicators": {
+          "90-100": "No red flags: consistent story across resume/LinkedIn/GitHub/Kaggle, authentic public presence, no plagiarism or fabricated claims/results.",
+          "70-89": "Minor inconsistencies but nothing concerning.",
+          "50-69": "Some inactivity or thin public footprint that makes claims hard to verify.",
+          "30-49": "Noticeable inconsistencies between resume and public profiles, copied notebooks/models, or unexplained gaps.",
+          "0-29": "Clear red flags: fabricated results/experience, plagiarized research/code, contradictory claims, or unprofessional public conduct."
+        },
+        "role_domain_relevance": {
+          "90-100": "Extensive AI/ML-focused repositories, Kaggle achievements, or publications in AI.",
+          "70-89": "Several AI/ML-related projects, though mixed with unrelated work.",
+          "50-69": "A small amount of AI/ML work amid a mostly unrelated portfolio.",
+          "30-49": "AI/ML work is incidental or superficial (e.g. one basic notebook using a pre-trained model).",
+          "0-29": "No visible AI/ML-related work at all."
+        }
+      },
+      "Software Tester": {
+        "technical_competency": {
+          "90-100": "Demonstrates mastery of automated testing frameworks (Selenium, Cypress, PyTest), CI/CD test integration, performance testing, and writing comprehensive test plans.",
+          "70-89": "Can write basic unit/integration tests but relies heavily on manual testing or lacks framework expertise.",
+          "50-69": "Understands basic testing concepts but has limited hands-on automation experience.",
+          "30-49": "Only tutorial-level exposure to testing tools; no evidence of independent test authoring.",
+          "0-29": "No credible evidence of testing skills, or claims contradicted by visible work."
+        },
+        "problem_solving": {
+          "90-100": "Evidence of identifying edge-case bugs in complex systems, building custom test harnesses, or significantly improving test coverage/quality metrics.",
+          "70-89": "Can design and execute standard test cases and identify common bugs.",
+          "50-69": "Solves problems only at tutorial/toy-project complexity.",
+          "30-49": "Minimal problem-solving evidence; mostly follows existing test scripts without adaptation.",
+          "0-29": "No evidence of independent problem-solving ability."
+        },
+        "communication": {
+          "90-100": "Clear, well-structured test plans/bug reports, documentation of QA processes; resume clearly narrates testing methodology and quality impact.",
+          "70-89": "Adequate documentation on projects; resume is clear but light on explaining testing approach.",
+          "50-69": "Sparse documentation; generic resume descriptions.",
+          "30-49": "Minimal or confusing documentation.",
+          "0-29": "No documentation, or communication is incoherent/contradictory."
+        },
+        "career_stability": {
+          "90-100": "Clear, logical career progression with tenures typically 2+ years per role and sensible reasons for transitions.",
+          "70-89": "Mostly stable history with one or two shorter stints that have plausible explanations.",
+          "50-69": "Mixed pattern: some short tenures (<1 year) without clear explanation, or one unexplained gap.",
+          "30-49": "Frequent job-hopping (multiple <1 year roles) or multiple unexplained gaps.",
+          "0-29": "Highly erratic history, chronic short tenures, or unexplained long gaps with no context."
+        },
+        "company_exposure": {
+          "90-100": "Experience at companies with strong QA/engineering quality culture, in clearly QA/testing-focused roles.",
+          "70-89": "Experience at reputable mid-size companies or startups with legitimate QA functions.",
+          "50-69": "Experience mostly at small/unknown companies or in generalist roles with minimal QA focus.",
+          "30-49": "Very limited or unclear company exposure; roles not clearly QA/testing-focused.",
+          "0-29": "No verifiable company exposure, or roles unrelated to software quality/testing."
+        },
+        "academic_signal": {
+          "90-100": "Degree in CS/related field from a recognized institution, and/or strong relevant certifications (ISTQB, test automation, CI/CD tooling).",
+          "70-89": "Relevant degree from a lesser-known institution, or unrelated degree plus solid relevant certifications.",
+          "50-69": "Unrelated degree with minimal relevant coursework/certification.",
+          "30-49": "No formal degree; only short/basic online courses.",
+          "0-29": "No academic signal at all, or credentials appear unverifiable/fabricated."
+        },
+        "initiative": {
+          "90-100": "Active open-source contributions to testing tools, personal QA automation side projects, blog posts, or hackathon participation.",
+          "70-89": "Some side projects or occasional contributions, but not sustained.",
+          "50-69": "A couple of forked/copied test scripts with minimal original work.",
+          "30-49": "Barely any public activity beyond required coursework/job tasks.",
+          "0-29": "No initiative evidence at all; entirely passive profile."
+        },
+        "risk_indicators": {
+          "90-100": "No red flags: consistent story across resume/LinkedIn/GitHub, authentic public presence, no plagiarism or fabricated claims.",
+          "70-89": "Minor inconsistencies but nothing concerning.",
+          "50-69": "Some inactivity or thin public footprint that makes claims hard to verify.",
+          "30-49": "Noticeable inconsistencies between resume and public profiles, copied test suites/content, or unexplained gaps.",
+          "0-29": "Clear red flags: fabricated experience, plagiarized test artifacts, contradictory claims, or unprofessional public conduct."
+        },
+        "role_domain_relevance": {
+          "90-100": "Repositories dedicated to QA automation, testing utilities, or contributions to testing frameworks.",
+          "70-89": "Several testing-related projects, though mixed with unrelated (e.g. development-only) work.",
+          "50-69": "A small amount of testing work amid a mostly unrelated portfolio.",
+          "30-49": "Testing work is incidental or superficial (e.g. a few basic unit tests in a larger project).",
+          "0-29": "No visible testing-related work at all."
+        }
+      }
+    },
+    "Marketing": {
+      "Digital Marketer": {
+        "technical_competency": {
+          "90-100": "Demonstrates mastery of performance marketing, SEO/SEM strategies, GA4, and multi-channel campaign attribution.",
+          "70-89": "Solid understanding of digital campaigns and analytics, but lacks advanced attribution or budget scaling experience.",
+          "50-69": "Can run basic ad campaigns and social media, limited grasp of deep analytics.",
+          "30-49": "Only exposure via personal projects or courses; no evidence of managing real ad spend.",
+          "0-29": "No credible evidence of marketing skills."
+        },
+        "problem_solving": {
+          "90-100": "Evidence of solving complex CAC/LTV optimization problems and scaling marketing efforts efficiently.",
+          "70-89": "Can optimize standard campaigns and resolve typical tracking issues.",
+          "50-69": "Solves problems only at a basic level; reliant on agency support.",
+          "30-49": "Minimal problem-solving evidence.",
+          "0-29": "No evidence of independent problem-solving ability."
+        },
+        "communication": {
+          "90-100": "Clear, compelling copywriting; publishes case studies on campaign performance; articulate resume.",
+          "70-89": "Adequate writing skills; resume explains campaign results clearly.",
+          "50-69": "Sparse documentation; generic resume descriptions without metrics.",
+          "30-49": "Minimal or confusing communication.",
+          "0-29": "No documentation, or communication is incoherent."
+        },
+        "career_stability": {
+          "90-100": "Clear, logical career progression with tenures typically 2+ years per role.",
+          "70-89": "Mostly stable history with one or two shorter stints.",
+          "50-69": "Mixed pattern: some short tenures (<1 year) without clear explanation.",
+          "30-49": "Frequent job-hopping.",
+          "0-29": "Highly erratic history."
+        },
+        "company_exposure": {
+          "90-100": "Experience at high-growth consumer brands or top-tier marketing agencies.",
+          "70-89": "Experience at reputable mid-size companies or standard agencies.",
+          "50-69": "Experience mostly at small/unknown companies.",
+          "30-49": "Very limited company exposure.",
+          "0-29": "No verifiable company exposure."
+        },
+        "academic_signal": {
+          "90-100": "Degree in Marketing/Business/Data and strong relevant certifications (Google Ads, Meta Blueprint).",
+          "70-89": "Relevant degree from a lesser-known institution, or unrelated degree plus solid certifications.",
+          "50-69": "Unrelated degree with minimal relevant coursework.",
+          "30-49": "No formal degree; basic courses only.",
+          "0-29": "No academic signal."
+        },
+        "initiative": {
+          "90-100": "Runs successful side-hustles, personal blogs with high traffic, or publishes deep marketing teardowns.",
+          "70-89": "Some personal projects or occasional industry posts.",
+          "50-69": "Minimal original content.",
+          "30-49": "Barely any public activity.",
+          "0-29": "No initiative evidence."
+        },
+        "risk_indicators": {
+          "90-100": "No red flags: authentic public presence, verifiable campaign metrics.",
+          "70-89": "Minor inconsistencies.",
+          "50-69": "Some inactivity or thin public footprint.",
+          "30-49": "Noticeable inconsistencies between claims and public profiles.",
+          "0-29": "Clear red flags: fabricated metrics or plagiarized content."
+        },
+        "role_domain_relevance": {
+          "90-100": "Extensive portfolio focused strictly on digital marketing campaigns and analytics.",
+          "70-89": "Several marketing-related projects, mixed with general business work.",
+          "50-69": "A small amount of marketing work.",
+          "30-49": "Marketing work is incidental.",
+          "0-29": "No visible marketing work at all."
+        }
+      },
+      "SEO Specialist": {
+        "technical_competency": {
+          "90-100": "Deep mastery of technical SEO, programmatic SEO, site architecture, and advanced keyword strategy.",
+          "70-89": "Solid understanding of on-page and off-page SEO, standard tools (Ahrefs, Semrush).",
+          "50-69": "Basic understanding of keywords and content optimization.",
+          "30-49": "Only theoretical knowledge; no evidence of ranking pages.",
+          "0-29": "No credible evidence of SEO skills."
+        },
+        "problem_solving": {
+          "90-100": "Successfully recovered sites from algorithm penalties or scaled traffic exponentially via technical fixes.",
+          "70-89": "Can diagnose standard indexing issues and improve rankings.",
+          "50-69": "Solves basic on-page issues.",
+          "30-49": "Minimal problem-solving evidence.",
+          "0-29": "No evidence of independent problem-solving ability."
+        },
+        "communication": {
+          "90-100": "Writes clear SEO audits and content guidelines; excellent resume narrative.",
+          "70-89": "Adequate audits and reporting skills.",
+          "50-69": "Sparse documentation.",
+          "30-49": "Minimal or confusing communication.",
+          "0-29": "No documentation."
+        },
+        "career_stability": {
+          "90-100": "Clear, logical career progression with tenures typically 2+ years.",
+          "70-89": "Mostly stable history.",
+          "50-69": "Mixed pattern of short tenures.",
+          "30-49": "Frequent job-hopping.",
+          "0-29": "Highly erratic history."
+        },
+        "company_exposure": {
+          "90-100": "Experience at high-traffic media sites, e-commerce giants, or top SEO agencies.",
+          "70-89": "Experience at reputable mid-size companies.",
+          "50-69": "Experience mostly at small companies.",
+          "30-49": "Very limited exposure.",
+          "0-29": "No verifiable exposure."
+        },
+        "academic_signal": {
+          "90-100": "Strong relevant certifications and track record; academic degree is less critical but present.",
+          "70-89": "Relevant certifications.",
+          "50-69": "Minimal relevant coursework.",
+          "30-49": "No formal training.",
+          "0-29": "No academic signal."
+        },
+        "initiative": {
+          "90-100": "Ranks their own niche sites successfully, publishes SEO research.",
+          "70-89": "Has a personal blog with decent SEO.",
+          "50-69": "Minimal original projects.",
+          "30-49": "Barely any public activity.",
+          "0-29": "No initiative evidence."
+        },
+        "risk_indicators": {
+          "90-100": "Uses white-hat techniques, no red flags.",
+          "70-89": "Minor inconsistencies.",
+          "50-69": "Thin public footprint.",
+          "30-49": "Evidence of relying heavily on black-hat or spam tactics.",
+          "0-29": "Clear red flags: penalized domains, fabricated results."
+        },
+        "role_domain_relevance": {
+          "90-100": "Extensive portfolio of organic traffic growth.",
+          "70-89": "Several SEO-related successes.",
+          "50-69": "A small amount of SEO work.",
+          "30-49": "SEO work is incidental.",
+          "0-29": "No visible SEO work."
+        }
+      }
+    },
+    "HR": {
+      "Technical Recruiter": {
+        "technical_competency": {
+          "90-100": "Deep understanding of tech stacks, advanced sourcing techniques (Boolean, GitHub, StackOverflow), and excellent closing rates.",
+          "70-89": "Solid understanding of standard IT roles and LinkedIn Recruiter.",
+          "50-69": "Basic sourcing skills, struggles with differentiating complex tech roles.",
+          "30-49": "Only exposure via general recruitment; little tech knowledge.",
+          "0-29": "No credible evidence of technical recruiting skills."
+        },
+        "problem_solving": {
+          "90-100": "Creative sourcing strategies for niche roles, data-driven pipeline optimization.",
+          "70-89": "Standard pipeline management and resolving typical hiring bottlenecks.",
+          "50-69": "Basic candidate screening.",
+          "30-49": "Minimal problem-solving evidence.",
+          "0-29": "No evidence of independent problem-solving ability."
+        },
+        "communication": {
+          "90-100": "Exceptional candidate outreach messages, strong employer branding content.",
+          "70-89": "Clear, professional communication and resume.",
+          "50-69": "Generic outreach templates.",
+          "30-49": "Poor grammar or confusing messaging.",
+          "0-29": "Incoherent communication."
+        },
+        "career_stability": {
+          "90-100": "Clear, logical career progression.",
+          "70-89": "Mostly stable history.",
+          "50-69": "Mixed pattern of short tenures.",
+          "30-49": "Frequent job-hopping.",
+          "0-29": "Highly erratic history."
+        },
+        "company_exposure": {
+          "90-100": "Experience scaling engineering teams at high-growth tech startups or FAANG.",
+          "70-89": "Experience at standard tech companies or reputable tech agencies.",
+          "50-69": "Experience mostly at generalist staffing agencies.",
+          "30-49": "Very limited exposure.",
+          "0-29": "No verifiable tech company exposure."
+        },
+        "academic_signal": {
+          "90-100": "Degree in HR/Business/Psychology and relevant recruiting certifications.",
+          "70-89": "Degree with some relevant training.",
+          "50-69": "Unrelated degree.",
+          "30-49": "No formal degree.",
+          "0-29": "No academic signal."
+        },
+        "initiative": {
+          "90-100": "Active in tech communities, organizes meetups, publishes hiring market insights.",
+          "70-89": "Attends meetups, active on LinkedIn.",
+          "50-69": "Minimal community engagement.",
+          "30-49": "Passive profile.",
+          "0-29": "No initiative evidence."
+        },
+        "risk_indicators": {
+          "90-100": "No red flags: authentic and highly professional public presence.",
+          "70-89": "Minor inconsistencies.",
+          "50-69": "Thin public footprint.",
+          "30-49": "Noticeable inconsistencies.",
+          "0-29": "Clear red flags."
+        },
+        "role_domain_relevance": {
+          "90-100": "Extensive history entirely focused on engineering/tech recruitment.",
+          "70-89": "Mostly tech recruitment, some general.",
+          "50-69": "Mostly general recruitment.",
+          "30-49": "Tech recruitment is incidental.",
+          "0-29": "No tech recruitment experience."
+        }
+      },
+      "HR Business Partner": {
+        "technical_competency": {
+          "90-100": "Mastery of employee relations, organizational design, performance management, and HR analytics.",
+          "70-89": "Solid understanding of core HR functions and compliance.",
+          "50-69": "Basic HR administration and support.",
+          "30-49": "Entry-level HR exposure.",
+          "0-29": "No credible evidence of HR skills."
+        },
+        "problem_solving": {
+          "90-100": "Resolves complex leadership conflicts, designs effective retention strategies.",
+          "70-89": "Handles standard employee relations issues well.",
+          "50-69": "Basic conflict resolution.",
+          "30-49": "Minimal problem-solving evidence.",
+          "0-29": "No evidence of independent problem-solving ability."
+        },
+        "communication": {
+          "90-100": "Exceptional executive communication, drafts clear company policies.",
+          "70-89": "Clear, professional communication.",
+          "50-69": "Generic documentation.",
+          "30-49": "Poor grammar or confusing messaging.",
+          "0-29": "Incoherent communication."
+        },
+        "career_stability": {
+          "90-100": "Clear, logical career progression.",
+          "70-89": "Mostly stable history.",
+          "50-69": "Mixed pattern of short tenures.",
+          "30-49": "Frequent job-hopping.",
+          "0-29": "Highly erratic history."
+        },
+        "company_exposure": {
+          "90-100": "Experience aligning HR with business goals at mid-to-large scale enterprises.",
+          "70-89": "Experience at established mid-size companies.",
+          "50-69": "Experience mostly at small companies.",
+          "30-49": "Very limited exposure.",
+          "0-29": "No verifiable company exposure."
+        },
+        "academic_signal": {
+          "90-100": "Degree in HR/Business and advanced certifications (SHRM-CP/SCP, SPHR).",
+          "70-89": "Degree with standard certifications.",
+          "50-69": "Unrelated degree.",
+          "30-49": "No formal degree.",
+          "0-29": "No academic signal."
+        },
+        "initiative": {
+          "90-100": "Publishes thought leadership on organizational culture, speaks at HR conferences.",
+          "70-89": "Active on LinkedIn with professional insights.",
+          "50-69": "Minimal community engagement.",
+          "30-49": "Passive profile.",
+          "0-29": "No initiative evidence."
+        },
+        "risk_indicators": {
+          "90-100": "Highly professional public presence.",
+          "70-89": "Minor inconsistencies.",
+          "50-69": "Thin public footprint.",
+          "30-49": "Noticeable inconsistencies.",
+          "0-29": "Clear red flags, breaches of confidentiality."
+        },
+        "role_domain_relevance": {
+          "90-100": "Extensive strategic HR leadership experience.",
+          "70-89": "Strong operational HR experience.",
+          "50-69": "Mostly administrative HR.",
+          "30-49": "HR work is incidental.",
+          "0-29": "No HR experience."
+        }
+      }
+    },
+    "Design": {
+      "UX/UI Designer": {
+        "technical_competency": {
+          "90-100": "Mastery of Figma, advanced prototyping, user research methodologies, design systems, and accessibility.",
+          "70-89": "Solid UI design skills and basic UX research, proficient in design tools.",
+          "50-69": "Can design basic screens but lacks systematic thinking or deep user empathy.",
+          "30-49": "Only tutorial-level exposure; designs are visually inconsistent.",
+          "0-29": "No credible evidence of design skills."
+        },
+        "problem_solving": {
+          "90-100": "Evidence of solving complex user flow problems and significantly improving conversion/satisfaction metrics.",
+          "70-89": "Can resolve standard usability issues.",
+          "50-69": "Designs mostly based on assumptions rather than data/research.",
+          "30-49": "Minimal problem-solving evidence.",
+          "0-29": "No evidence of independent problem-solving ability."
+        },
+        "communication": {
+          "90-100": "Exceptional portfolio case studies detailing the 'why' behind design decisions; strong presentation skills.",
+          "70-89": "Clear portfolio with basic process explanations.",
+          "50-69": "Portfolio is just images (Dribbble style) with no context.",
+          "30-49": "Minimal or confusing portfolio.",
+          "0-29": "No portfolio."
+        },
+        "career_stability": {
+          "90-100": "Clear, logical career progression.",
+          "70-89": "Mostly stable history.",
+          "50-69": "Mixed pattern of short tenures.",
+          "30-49": "Frequent job-hopping.",
+          "0-29": "Highly erratic history."
+        },
+        "company_exposure": {
+          "90-100": "Experience at product-led tech companies with high design maturity.",
+          "70-89": "Experience at standard tech companies or agencies.",
+          "50-69": "Experience mostly at small/unknown companies or freelance.",
+          "30-49": "Very limited exposure.",
+          "0-29": "No verifiable company exposure."
+        },
+        "academic_signal": {
+          "90-100": "Degree in HCI/Design and strong portfolio.",
+          "70-89": "Relevant bootcamp/degree.",
+          "50-69": "Unrelated degree with minimal training.",
+          "30-49": "No formal training.",
+          "0-29": "No academic signal."
+        },
+        "initiative": {
+          "90-100": "Creates open-source UI kits, writes design articles, active on Behance/Dribbble with original concepts.",
+          "70-89": "Some personal projects.",
+          "50-69": "Minimal original projects.",
+          "30-49": "Passive profile.",
+          "0-29": "No initiative evidence."
+        },
+        "risk_indicators": {
+          "90-100": "No red flags: authentic portfolio.",
+          "70-89": "Minor inconsistencies.",
+          "50-69": "Thin public footprint.",
+          "30-49": "Noticeable inconsistencies.",
+          "0-29": "Plagiarized portfolio pieces."
+        },
+        "role_domain_relevance": {
+          "90-100": "Extensive portfolio focused strictly on digital product design.",
+          "70-89": "Mostly product design, some print/graphic.",
+          "50-69": "Mostly graphic design with a little UI.",
+          "30-49": "UI/UX work is incidental.",
+          "0-29": "No UI/UX work."
+        }
+      },
+      "Product Designer": {
+        "technical_competency": {
+          "90-100": "Mastery of end-to-end product design, bridging UX, UI, and product strategy/business metrics.",
+          "70-89": "Strong UX/UI skills with some understanding of business goals.",
+          "50-69": "Mostly focused on UI execution.",
+          "30-49": "Only entry-level design skills.",
+          "0-29": "No credible evidence of design skills."
+        },
+        "problem_solving": {
+          "90-100": "Drives product strategy through design, balancing user needs with technical constraints and business KPIs.",
+          "70-89": "Effectively solves feature-level design problems.",
+          "50-69": "Solves surface-level interaction issues.",
+          "30-49": "Minimal problem-solving evidence.",
+          "0-29": "No evidence of independent problem-solving ability."
+        },
+        "communication": {
+          "90-100": "Exceptional case studies showing deep product thinking; excellent cross-functional communication.",
+          "70-89": "Clear portfolio with process explanations.",
+          "50-69": "Portfolio lacks strategic context.",
+          "30-49": "Minimal or confusing portfolio.",
+          "0-29": "No portfolio."
+        },
+        "career_stability": {
+          "90-100": "Clear, logical career progression.",
+          "70-89": "Mostly stable history.",
+          "50-69": "Mixed pattern of short tenures.",
+          "30-49": "Frequent job-hopping.",
+          "0-29": "Highly erratic history."
+        },
+        "company_exposure": {
+          "90-100": "Experience at high-growth, product-centric tech companies.",
+          "70-89": "Experience at standard tech companies.",
+          "50-69": "Experience mostly at agencies (less pure product focus).",
+          "30-49": "Very limited exposure.",
+          "0-29": "No verifiable company exposure."
+        },
+        "academic_signal": {
+          "90-100": "Degree in HCI/Design/Product and strong portfolio.",
+          "70-89": "Relevant bootcamp/degree.",
+          "50-69": "Unrelated degree.",
+          "30-49": "No formal training.",
+          "0-29": "No academic signal."
+        },
+        "initiative": {
+          "90-100": "Writes extensively on product strategy, mentors other designers.",
+          "70-89": "Some personal case studies.",
+          "50-69": "Minimal original projects.",
+          "30-49": "Passive profile.",
+          "0-29": "No initiative evidence."
+        },
+        "risk_indicators": {
+          "90-100": "No red flags.",
+          "70-89": "Minor inconsistencies.",
+          "50-69": "Thin public footprint.",
+          "30-49": "Noticeable inconsistencies.",
+          "0-29": "Plagiarized portfolio pieces."
+        },
+        "role_domain_relevance": {
+          "90-100": "Extensive portfolio focused strictly on comprehensive product design.",
+          "70-89": "Mostly product design.",
+          "50-69": "Mostly visual design.",
+          "30-49": "Product design work is incidental.",
+          "0-29": "No product design work."
+        }
+      }
+    },
+    "Finance": {
+      "Financial Analyst": {
+        "technical_competency": {
+          "90-100": "Mastery of financial modeling, advanced Excel/VBA/SQL, forecasting, and deep accounting principles.",
+          "70-89": "Solid understanding of budgeting, variance analysis, and standard modeling.",
+          "50-69": "Basic spreadsheet skills and data entry.",
+          "30-49": "Only academic exposure.",
+          "0-29": "No credible evidence of finance skills."
+        },
+        "problem_solving": {
+          "90-100": "Identifies complex cost-saving opportunities, builds predictive models for revenue.",
+          "70-89": "Resolves standard reporting discrepancies and variance issues.",
+          "50-69": "Basic reconciliation.",
+          "30-49": "Minimal problem-solving evidence.",
+          "0-29": "No evidence of independent problem-solving ability."
+        },
+        "communication": {
+          "90-100": "Translates complex financial data into clear, actionable executive presentations.",
+          "70-89": "Clear, professional financial reporting.",
+          "50-69": "Generic reporting.",
+          "30-49": "Confusing or error-prone reports.",
+          "0-29": "Incoherent communication."
+        },
+        "career_stability": {
+          "90-100": "Clear, logical career progression.",
+          "70-89": "Mostly stable history.",
+          "50-69": "Mixed pattern of short tenures.",
+          "30-49": "Frequent job-hopping.",
+          "0-29": "Highly erratic history."
+        },
+        "company_exposure": {
+          "90-100": "Experience at top-tier financial institutions or corporate finance at Fortune 500.",
+          "70-89": "Experience at reputable mid-size companies.",
+          "50-69": "Experience mostly at small companies.",
+          "30-49": "Very limited exposure.",
+          "0-29": "No verifiable company exposure."
+        },
+        "academic_signal": {
+          "90-100": "Degree in Finance/Economics and CFA, CPA, or top MBA.",
+          "70-89": "Degree in Finance.",
+          "50-69": "Unrelated degree with some finance coursework.",
+          "30-49": "No formal degree.",
+          "0-29": "No academic signal."
+        },
+        "initiative": {
+          "90-100": "Publishes market analysis, active in finance communities, builds open-source financial tools.",
+          "70-89": "Some personal market research.",
+          "50-69": "Minimal original projects.",
+          "30-49": "Passive profile.",
+          "0-29": "No initiative evidence."
+        },
+        "risk_indicators": {
+          "90-100": "No red flags: high professional integrity.",
+          "70-89": "Minor inconsistencies.",
+          "50-69": "Thin public footprint.",
+          "30-49": "Noticeable inconsistencies.",
+          "0-29": "Clear red flags, compliance/regulatory issues."
+        },
+        "role_domain_relevance": {
+          "90-100": "Extensive history in corporate finance or investment banking.",
+          "70-89": "Solid finance history.",
+          "50-69": "Mostly accounting/bookkeeping.",
+          "30-49": "Finance work is incidental.",
+          "0-29": "No finance work."
+        }
+      },
+      "Data Analyst (Finance)": {
+        "technical_competency": {
+          "90-100": "Mastery of SQL, Python/R, BI tools (Tableau, PowerBI), and financial data infrastructure.",
+          "70-89": "Strong SQL and BI dashboarding skills.",
+          "50-69": "Basic SQL and Excel data manipulation.",
+          "30-49": "Only academic exposure.",
+          "0-29": "No credible evidence of data skills."
+        },
+        "problem_solving": {
+          "90-100": "Automates complex financial reporting pipelines, builds advanced predictive dashboards.",
+          "70-89": "Creates useful dashboards and resolves data quality issues.",
+          "50-69": "Generates basic reports from clean data.",
+          "30-49": "Minimal problem-solving evidence.",
+          "0-29": "No evidence of independent problem-solving ability."
+        },
+        "communication": {
+          "90-100": "Exceptional data storytelling, translates data into strategic financial insights.",
+          "70-89": "Clear, accurate data visualization and reporting.",
+          "50-69": "Dashboards lack clear business narrative.",
+          "30-49": "Confusing charts/reports.",
+          "0-29": "Incoherent communication."
+        },
+        "career_stability": {
+          "90-100": "Clear, logical career progression.",
+          "70-89": "Mostly stable history.",
+          "50-69": "Mixed pattern of short tenures.",
+          "30-49": "Frequent job-hopping.",
+          "0-29": "Highly erratic history."
+        },
+        "company_exposure": {
+          "90-100": "Experience in data-driven finance teams at major tech or financial firms.",
+          "70-89": "Experience at reputable mid-size companies.",
+          "50-69": "Experience mostly at small companies.",
+          "30-49": "Very limited exposure.",
+          "0-29": "No verifiable company exposure."
+        },
+        "academic_signal": {
+          "90-100": "Degree in Data Science/Statistics/Finance and strong technical portfolio.",
+          "70-89": "Degree in quantitative field.",
+          "50-69": "Unrelated degree with bootcamps.",
+          "30-49": "No formal degree.",
+          "0-29": "No academic signal."
+        },
+        "initiative": {
+          "90-100": "Active on Kaggle, open-source data projects, publishes data analyses.",
+          "70-89": "Personal data projects on GitHub.",
+          "50-69": "Minimal original projects.",
+          "30-49": "Passive profile.",
+          "0-29": "No initiative evidence."
+        },
+        "risk_indicators": {
+          "90-100": "No red flags.",
+          "70-89": "Minor inconsistencies.",
+          "50-69": "Thin public footprint.",
+          "30-49": "Noticeable inconsistencies.",
+          "0-29": "Fabricated projects."
+        },
+        "role_domain_relevance": {
+          "90-100": "Extensive portfolio focused strictly on financial data analytics.",
+          "70-89": "Solid data analytics history, some finance focus.",
+          "50-69": "General data analytics.",
+          "30-49": "Data work is incidental.",
+          "0-29": "No data work."
+        }
+      }
+    },
+    "Research": {
+      "Research Scientist": {
+        "technical_competency": {
+          "90-100": "Deep expertise in core research domain, advanced experimental design, statistical analysis, and publishing.",
+          "70-89": "Strong research skills, capable of executing complex experiments.",
+          "50-69": "Basic laboratory/research skills, reliant on principal investigator.",
+          "30-49": "Only undergraduate-level lab exposure.",
+          "0-29": "No credible evidence of research skills."
+        },
+        "problem_solving": {
+          "90-100": "Pioneers novel methodologies, solves unprecedented technical/scientific challenges.",
+          "70-89": "Effectively troubleshoots complex experimental setups.",
+          "50-69": "Follows established protocols well.",
+          "30-49": "Minimal problem-solving evidence.",
+          "0-29": "No evidence of independent problem-solving ability."
+        },
+        "communication": {
+          "90-100": "Prolific first-author publications in top-tier journals, excellent grant writing.",
+          "70-89": "Regular publications, clear scientific writing.",
+          "50-69": "Co-authored papers, adequate reporting.",
+          "30-49": "Poor scientific writing.",
+          "0-29": "No publications or incoherent writing."
+        },
+        "career_stability": {
+          "90-100": "Clear progression (Ph.D. -> Postdoc -> Scientist).",
+          "70-89": "Stable academic/industry research history.",
+          "50-69": "Some unexplained gaps in research history.",
+          "30-49": "Frequent hopping between unrelated labs.",
+          "0-29": "Highly erratic history."
+        },
+        "company_exposure": {
+          "90-100": "Experience at top-tier academic institutions (e.g., MIT, Stanford) or elite corporate R&D labs (e.g., DeepMind, Microsoft Research).",
+          "70-89": "Experience at reputable R&D labs or R1 universities.",
+          "50-69": "Experience mostly at smaller labs.",
+          "30-49": "Very limited exposure.",
+          "0-29": "No verifiable exposure."
+        },
+        "academic_signal": {
+          "90-100": "Ph.D. from top-tier university with numerous citations and high-impact papers.",
+          "70-89": "Ph.D. or Master's with solid publication record.",
+          "50-69": "Master's with minimal publications.",
+          "30-49": "Bachelor's degree only.",
+          "0-29": "No academic signal."
+        },
+        "initiative": {
+          "90-100": "Secures independent funding/grants, leads research initiatives.",
+          "70-89": "Proposes new experiments, mentors juniors.",
+          "50-69": "Executes assigned work well.",
+          "30-49": "Passive profile.",
+          "0-29": "No initiative evidence."
+        },
+        "risk_indicators": {
+          "90-100": "High academic integrity, replicable results.",
+          "70-89": "Minor inconsistencies.",
+          "50-69": "Thin public footprint outside of basic papers.",
+          "30-49": "Noticeable inconsistencies or paper retractions.",
+          "0-29": "Clear red flags: data fabrication, severe ethical violations."
+        },
+        "role_domain_relevance": {
+          "90-100": "Extensive publication history strictly within the target research domain.",
+          "70-89": "Strong research history, partially overlapping with domain.",
+          "50-69": "General research history.",
+          "30-49": "Research work is incidental.",
+          "0-29": "No research work."
+        }
+      },
+      "Academic Researcher": {
+        "technical_competency": {
+          "90-100": "Mastery of academic methodologies, literature review, and academic writing standards.",
+          "70-89": "Strong academic research and writing skills.",
+          "50-69": "Basic academic support skills.",
+          "30-49": "Only undergraduate exposure.",
+          "0-29": "No credible evidence of academic skills."
+        },
+        "problem_solving": {
+          "90-100": "Identifies major gaps in literature and designs comprehensive studies to address them.",
+          "70-89": "Executes well-designed studies to answer specific questions.",
+          "50-69": "Assists in literature reviews and data gathering.",
+          "30-49": "Minimal problem-solving evidence.",
+          "0-29": "No evidence of independent problem-solving ability."
+        },
+        "communication": {
+          "90-100": "Presents at major international conferences, highly cited papers.",
+          "70-89": "Regular publications in respected journals.",
+          "50-69": "Co-authored papers.",
+          "30-49": "Poor academic writing.",
+          "0-29": "No publications."
+        },
+        "career_stability": {
+          "90-100": "Clear progression through academic ranks (Assistant -> Associate).",
+          "70-89": "Stable academic history (Postdocs, lectureships).",
+          "50-69": "Some unexplained gaps.",
+          "30-49": "Frequent hopping.",
+          "0-29": "Highly erratic history."
+        },
+        "company_exposure": {
+          "90-100": "Tenure at prestigious global universities.",
+          "70-89": "Positions at reputable universities.",
+          "50-69": "Positions mostly at local/smaller colleges.",
+          "30-49": "Very limited exposure.",
+          "0-29": "No verifiable exposure."
+        },
+        "academic_signal": {
+          "90-100": "Ph.D. with prestigious fellowships (e.g., NSF, Marie Curie).",
+          "70-89": "Ph.D. with solid record.",
+          "50-69": "Master's degree.",
+          "30-49": "Bachelor's degree only.",
+          "0-29": "No academic signal."
+        },
+        "initiative": {
+          "90-100": "Leads major collaborations, secures massive grants, chairs conferences.",
+          "70-89": "Organizes panels, active in academic societies.",
+          "50-69": "Attends conferences.",
+          "30-49": "Passive profile.",
+          "0-29": "No initiative evidence."
+        },
+        "risk_indicators": {
+          "90-100": "Impeccable academic record.",
+          "70-89": "Minor inconsistencies.",
+          "50-69": "Thin public footprint.",
+          "30-49": "Noticeable inconsistencies.",
+          "0-29": "Plagiarism, ethical breaches."
+        },
+        "role_domain_relevance": {
+          "90-100": "Internationally recognized expert in the specific academic niche.",
+          "70-89": "Strong publication record in the general field.",
+          "50-69": "Publications in adjacent fields.",
+          "30-49": "Academic work is incidental.",
+          "0-29": "No academic work."
+        }
+      }
+    }
+  }
+}

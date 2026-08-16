@@ -145,6 +145,7 @@ class EvaluateResponse(BaseModel):
     whats_changed_summary: str | None = None
     re_engage_flag:        bool | None = None
     status:                str | None = None
+    executive_summary:     str | None = None
     possible_profiles:     dict[str, list[str]] = {}
 
 
@@ -184,6 +185,7 @@ class CandidateRow(BaseModel):
     whats_changed_summary: str | None = None
     re_engage_flag:        bool | None = None
     status:                str | None = None
+    executive_summary:     str | None = None
 
     created_at: str
 

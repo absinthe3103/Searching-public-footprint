@@ -55,6 +55,7 @@ interface EvaluateResponse {
   fit_direction?: string
   whats_changed_summary?: string
   re_engage_flag?: boolean
+  executive_summary?: string
   original_role?: string
   original_tier?: string
   university?: string
@@ -127,16 +128,7 @@ const CULTURE_DIMENSIONS = [
   { key: 'stability',              label: 'Stability' },
 ] as const
 
-// Must match Backend/database/db.py CULTURE_DIMENSIONS exactly (same keys)
-const CULTURE_DIMENSIONS = [
-  { key: 'innovation_risk_taking', label: 'Innovation & Risk Taking' },
-  { key: 'attention_to_detail',    label: 'Attention to Detail' },
-  { key: 'outcome_orientation',    label: 'Outcome Orientation' },
-  { key: 'people_orientation',     label: 'People Orientation' },
-  { key: 'team_orientation',       label: 'Team Orientation' },
-  { key: 'aggressiveness',         label: 'Aggressiveness' },
-  { key: 'stability',              label: 'Stability' },
-] as const
+
 
 const USERNAME_FIELDS = [
   { key: 'github_username',           label: 'GitHub',         icon: 'ti-brand-github',     placeholder: 'e.g. github.com/yourname',                         urlPattern: /github\.com\/([A-Za-z0-9_-]+)/ },
@@ -264,10 +256,20 @@ function drawRadar(canvas: HTMLCanvasElement, scores: DimensionScores) {
 /* ══════════════════════════════════════════════════════════
    PAGE COMPONENT
 ══════════════════════════════════════════════════════════ */
+const SECTORS = {
+  "IT": ["Back-end Developer", "Front-End Developer", "Software Engineer", "AI-Engineer", "Software Tester"],
+  "Marketing": ["Digital Marketer", "SEO Specialist", "Content Strategist"],
+  "HR": ["Technical Recruiter", "HR Business Partner"],
+  "Design": ["UX/UI Designer", "Product Designer"],
+  "Finance": ["Financial Analyst", "Data Analyst (Finance)"],
+  "Research": ["Research Scientist", "Academic Researcher"]
+}
+
 export default function Page() {
   const [view, setView] = useState<'search' | 'talent_radar' | 'preferences'>('search')
   const [candidateName, setCandidateName] = useState('')
   const [originalRole, setOriginalRole] = useState('Senior Backend Engineer')
+  const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false)
   const [originalTier, setOriginalTier] = useState('Tier 1')
   // V2: university + summary profile fields
   const [university, setUniversity] = useState('')
@@ -799,9 +801,66 @@ export default function Page() {
                   )}
                 </div>
 
-                <div style={{ marginBottom: 20 }}>
+                <div style={{ marginBottom: 20, position: 'relative' }}>
                   <label className="field-label">Original Role Applied For</label>
-                  <input className="field-input" placeholder="e.g. Senior Backend Engineer" value={originalRole} onChange={e => setOriginalRole(e.target.value)} />
+                  <div
+                    className="field-input"
+                    onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
+                    style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--slate-dark)', color: '#fff' }}
+                  >
+                    {originalRole || 'Select a role...'}
+                    <i className="ti-chevron-down" style={{ fontSize: 12, color: 'var(--slate)' }}></i>
+                  </div>
+                  {isRoleDropdownOpen && (
+                    <>
+                      <div
+                        style={{ position: 'fixed', inset: 0, zIndex: 9 }}
+                        onClick={() => setIsRoleDropdownOpen(false)}
+                      />
+                      <div style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        marginTop: 4,
+                        backgroundColor: '#0f172a',
+                        border: '1px solid var(--slate-border)',
+                        borderRadius: 8,
+                        zIndex: 10,
+                        overflowY: 'auto',
+                        maxHeight: '220px',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.5)'
+                      }}>
+                        {Object.entries(SECTORS).map(([sector, roles]) => (
+                          <div key={sector}>
+                            <div style={{ padding: '8px 14px', fontSize: 11, fontWeight: 700, color: '#94a3b8', backgroundColor: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              {sector}
+                            </div>
+                            {roles.map(role => (
+                              <div
+                                key={role}
+                                onClick={() => {
+                                  setOriginalRole(role)
+                                  setIsRoleDropdownOpen(false)
+                                }}
+                                style={{
+                                  padding: '10px 14px 10px 24px',
+                                  cursor: 'pointer',
+                                  fontSize: 14,
+                                  color: originalRole === role ? '#fff' : 'var(--slate)',
+                                  backgroundColor: originalRole === role ? 'rgba(56, 189, 248, 0.1)' : 'transparent',
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--slate-dark)'}
+                                onMouseLeave={e => e.currentTarget.style.backgroundColor = originalRole === role ? 'rgba(56, 189, 248, 0.1)' : 'transparent'}
+                              >
+                                {role}
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div style={{ marginBottom: 20 }}>
@@ -826,29 +885,7 @@ export default function Page() {
                   />
                 </div>
 
-                {/* University + Summary Profile — both optional, stacked.
-                Summary Profile lets the AI determine which organizational
-                culture dimension(s) the candidate fits, based only on this text. */}
-                <div style={{ marginBottom: 20 }}>
-                  <label className="field-label">University (optional)</label>
-                  <input
-                    className="field-input"
-                    placeholder="e.g. UTAR"
-                    value={university}
-                    onChange={e => setUniversity(e.target.value)}
-                  />
-                </div>
-                <div style={{ marginBottom: 20 }}>
-                  <label className="field-label">Summary Profile (optional)</label>
-                  <textarea
-                    className="field-input"
-                    placeholder="Short paragraph describing the candidate's working style..."
-                    value={summaryProfile}
-                    onChange={e => setSummaryProfile(e.target.value)}
-                    rows={3}
-                    style={{ resize: 'vertical', minHeight: 60, width: '100%', fontFamily: 'inherit' }}
-                  />
-                </div>
+
 
                 <div className="section-label">Job requirements</div>
 
@@ -1494,11 +1531,19 @@ export default function Page() {
                           </div>
                           <span className="badge" style={{ marginLeft: 'auto', fontSize: 9, padding: '2px 8px', background: 'rgba(201,168,76,0.08)', border: '0.5px solid var(--gold-dim)', color: 'var(--gold-dim)' }}>Coming soon</span>
                         </div>
-                        <div style={styles.aiSummaryPlaceholder}>
-                          <i className="ti ti-sparkles" aria-hidden style={{ fontSize: 28, color: 'var(--gold-dim)', marginBottom: 8 }} />
-                          <p style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center', lineHeight: 1.7, maxWidth: 280 }}>
-                            A concise natural-language summary of this candidate's public footprint will appear here once an AI model is configured.
-                          </p>
+                        <div style={result.executive_summary ? { padding: '8px 4px' } : styles.aiSummaryPlaceholder}>
+                          {result.executive_summary ? (
+                            <div style={{ fontSize: 13, color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+                              {result.executive_summary}
+                            </div>
+                          ) : (
+                            <>
+                              <i className="ti ti-sparkles" aria-hidden style={{ fontSize: 28, color: 'var(--gold-dim)', marginBottom: 8 }} />
+                              <p style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center', lineHeight: 1.7, maxWidth: 280 }}>
+                                A concise natural-language summary of this candidate's public footprint will appear here once an AI model is configured.
+                              </p>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>

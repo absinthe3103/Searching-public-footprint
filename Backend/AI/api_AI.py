@@ -43,10 +43,11 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # ── Import siblings ──────────────────────────────────────
 _BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, _BACKEND)
 sys.path.insert(0, os.path.join(_BACKEND, "database"))
 sys.path.insert(0, os.path.join(_BACKEND, "src"))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from db import insert_candidate, get_all_candidates, CULTURE_DIMENSIONS
+from database.db import insert_candidate, get_all_candidates, CULTURE_DIMENSIONS
 
 # ── OpenRouter API ───────────────────────────────────────
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -119,6 +120,7 @@ class CandidateEvaluation(BaseModel):
     whats_changed_summary: str = Field(description="A plain-language explanation of what changed in their public footprint")
     re_engage_flag: bool = Field(description="True if it is a good time to re-engage, False otherwise")
     status: str = Field(description="One of: 'Active opportunity', 'Re-engage', 'Watch', 'Faded'")
+    executive_summary: str = Field(description="Markdown formatted executive summary report")
 
 SCORING_SYSTEM_PROMPT = """
 You are the HINT Master Persona, an expert AI hiring evaluator. You will receive a candidate's public profile data
@@ -136,6 +138,24 @@ culture dimension (from the fixed list of 7) that the paragraph reflects — a
 candidate can match multiple dimensions. Base this only on what the paragraph
 actually says; do not infer culture fit from GitHub/LinkedIn data. If no
 summary profile is provided, return an empty list for culture_fit_dimensions.
+
+Generate a comprehensive, professional Executive Summary Report for the hiring manager.
+Your tone should be objective, highly analytical, and decisive.
+Generate the report in clean Markdown format using the following structure:
+### 1. Executive Pitch
+Provide a concise 2-3 sentence high-level pitch of the candidate. Who are they, what is their core expertise, and what is their estimated seniority level (e.g., Junior, Mid-level, Senior)?
+### 2. Education & Academic Signals
+Summarize their educational background (e.g., University, degrees). Highlight notable academic signals.
+### 3. Top Projects & Public Footprint
+Highlight the top 2-3 most impressive public contributions.
+### 4. Job Alignment & Skill Matrix
+Evaluate how closely their public footprint aligns with the specific Job Requirements.
+### 5. Cultural Fit & Behavioral Indicators
+Infer their working style based on public footprint.
+### 6. Risk Assessment & Blind Spots
+Identify any potential red flags or missing signals.
+### 7. Hiring Recommendation
+Provide a definitive recommendation from: STRONG YES (Fast Track), YES (Proceed to Interview), WATCH (Keep in Pipeline), PASS (Does not meet bar). Provide a 1-2 sentence justification.
 """
 
 
@@ -315,6 +335,26 @@ def build_prompt(candidate_name: str, requirements: list[str],
                  original_role: str = "", original_tier: str = "",
                  university: str = "", summary_profile: str = "") -> str:
 
+    rubric_block = ""
+    try:
+        rubrics_path = os.path.join(os.path.dirname(__file__), "rubrics.json")
+        with open(rubrics_path, "r", encoding="utf-8") as f:
+            rubrics_data = json.load(f)
+            
+        role_rubric = None
+        for sector, roles in rubrics_data.get("rubric", {}).items():
+            if original_role in roles:
+                role_rubric = roles[original_role]
+                break
+                
+        if role_rubric:
+            rubric_block = f"\nEVALUATION RUBRIC FOR '{original_role}':\n" + json.dumps(role_rubric, indent=2) + "\n"
+        else:
+            scoring_bands = rubrics_data.get("_meta", {}).get("scoring_bands", {})
+            rubric_block = f"\nSCORING BANDS:\n" + json.dumps(scoring_bands, indent=2) + "\n"
+    except Exception as e:
+        print(f"  ⚠ Could not load rubrics.json: {e}")
+
     def src_summary(key: str) -> str:
         d = sources.get(key, {})
         lines = [f"  Summary: {d.get('summary', 'N/A')}"]
@@ -358,7 +398,7 @@ UNIVERSITY: {university or 'Unknown'}
 {summary_profile_block}
 JOB REQUIREMENTS:
 {chr(10).join(f"- {r}" for r in requirements)}
-
+{rubric_block}
 EXTRACTED KEYWORDS: {kws}
 
 PUBLIC PROFILE DATA:
@@ -474,6 +514,7 @@ IMPORTANT: You MUST respond with ONLY a valid JSON object matching this exact st
   "whats_changed_summary": "<plain English summary>",
   "re_engage_flag": <true|false>,
   "status": "<Active opportunity|Re-engage|Watch|Faded>",
+  "executive_summary": "<Markdown string>",
   "culture_fit_dimensions": []
 }"""},
         ],
@@ -568,6 +609,7 @@ IMPORTANT: You MUST respond with ONLY a valid JSON object matching this exact st
   "whats_changed_summary": "<plain English summary>",
   "re_engage_flag": <true|false>,
   "status": "<Active opportunity|Re-engage|Watch|Faded>",
+  "executive_summary": "<Markdown string>",
   "culture_fit_dimensions": []
 }"""},
         ],
@@ -647,6 +689,7 @@ def evaluate_candidate(candidate_name: str, requirements: list[str],
         scores["whats_changed_summary"] = "AI evaluation failed"
         scores["re_engage_flag"] = False
         scores["status"] = "Watch"
+        scores["executive_summary"] = "AI evaluation failed"
         scores["culture_fit_dimensions"] = []
         scoring_failed = True
 
@@ -691,7 +734,8 @@ def evaluate_candidate(candidate_name: str, requirements: list[str],
         fit_direction=scores.get("fit_direction", ""),
         whats_changed_summary=scores.get("whats_changed_summary", ""),
         re_engage_flag=scores.get("re_engage_flag", False),
-        status=scores.get("status", "")
+        status=scores.get("status", ""),
+        executive_summary=scores.get("executive_summary", "")
     )
     print(f"  ✓ Saved to database with ID {db_id}")
 

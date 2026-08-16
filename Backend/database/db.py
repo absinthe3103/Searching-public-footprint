@@ -75,6 +75,7 @@ def init_db():
                 whats_changed_summary TEXT,
                 re_engage_flag BOOLEAN,
                 status         TEXT,
+                executive_summary TEXT,
                 {username_cols_sql},
                 {dim_cols_sql},
                 created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -112,6 +113,7 @@ def insert_candidate(name: str, dimensions: dict, usernames: dict | None = None,
                      original_role: str = "", original_tier: str = "",
                      fit_direction: str = "", whats_changed_summary: str = "",
                      re_engage_flag: bool = False, status: str = "",
+                     executive_summary: str = "",
                      university: str = "", summary_profile: str = "",
                      culture_fit_dimensions: list | None = None) -> int:
     """
@@ -128,13 +130,13 @@ def insert_candidate(name: str, dimensions: dict, usernames: dict | None = None,
     columns = (
         ["name", "original_role", "original_tier", "university", "summary_profile",
          "culture_fit_dimensions",
-         "fit_direction", "whats_changed_summary", "re_engage_flag", "status"]
+         "fit_direction", "whats_changed_summary", "re_engage_flag", "status", "executive_summary"]
         + USERNAME_COLUMNS + DIMENSION_COLUMNS
     )
     values = (
         [name, original_role, original_tier, university, summary_profile,
          json.dumps(culture_fit_dimensions),
-         fit_direction, whats_changed_summary, re_engage_flag, status]
+         fit_direction, whats_changed_summary, re_engage_flag, status, executive_summary]
         + [usernames.get(col) for col in USERNAME_COLUMNS]
         + [dimensions.get(col, 0) for col in DIMENSION_COLUMNS]
     )
