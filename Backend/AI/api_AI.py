@@ -226,29 +226,61 @@ ROLE_KEYWORDS: dict[str, list[str]] = {
 }
 
 
+# ── Frontend role → domain mapping ──────────────────────
+ROLE_TO_DOMAIN: dict[str, str] = {
+    # IT
+    "Back-end Developer":        "it",
+    "Front-End Developer":       "it",
+    "Software Engineer":         "it",
+    "AI-Engineer":               "it",
+    "Software Tester":           "it",
+    # Marketing
+    "Digital Marketer":          "marketing",
+    "SEO Specialist":            "marketing",
+    "Content Strategist":        "marketing",
+    # HR
+    "Technical Recruiter":       "hr",
+    "HR Business Partner":       "hr",
+    # Design
+    "UX/UI Designer":            "design",
+    "Product Designer":          "design",
+    # Finance
+    "Financial Analyst":         "finance",
+    "Data Analyst (Finance)":    "finance",
+    # Research
+    "Research Scientist":        "research",
+    "Academic Researcher":       "research",
+}
+
 def detect_role_domain(original_role: str, requirements: list[str]) -> str:
     """
-    Returns the role domain key by scoring role string and requirements.
-    original_role is weighted 3x heavier than requirements so an explicit
-    role title (e.g. "HR") always wins over incidental skill keywords (e.g. React).
-    Defaults to 'it' if no clear match.
+    Maps the frontend-supplied role title directly to a domain key.
+    Falls back to keyword scoring if the role title isn't in the lookup table
+    (e.g. a custom role typed manually), then defaults to 'it'.
     """
+    # Direct lookup first (case-insensitive strip)
+    domain = ROLE_TO_DOMAIN.get(original_role.strip())
+    if domain:
+        print(f"  Role detected: '{domain}' (direct match for '{original_role}')")
+        return domain
+
+    # Fallback: keyword scoring for unrecognised/custom roles
+    print(f"  ⚠ '{original_role}' not in role map — falling back to keyword scoring")
     role_text = original_role.lower()
     req_text  = " ".join(requirements).lower()
-
     scores = {domain: 0 for domain in ROLE_KEYWORDS}
-    for domain, kws in ROLE_KEYWORDS.items():
+    for dom, kws in ROLE_KEYWORDS.items():
         for kw in kws:
             if kw in role_text:
-                scores[domain] += 3   # role title — high weight
+                scores[dom] += 3
             if kw in req_text:
-                scores[domain] += 1   # requirement — low weight
-
-    best = max(scores, key=scores.get)
+                scores[dom] += 1
+    best       = max(scores, key=scores.get)
     best_score = scores[best]
     if best_score == 0:
+        print(f"  Role detected: 'it' (default — no keyword match)")
         return "it"
-    print(f"  Role detected: '{best}' (score={best_score})")
+    print(f"  Role detected: '{best}' (keyword fallback, score={best_score})")
     return best
 
 
@@ -437,7 +469,7 @@ Based on all the above, score this candidate and evaluate their re-engagement st
 # ──────────────────────────────────────────────────────────
 def call_gemini(prompt: str) -> dict:
     print(f"\n{'═'*60}")
-    print(f"  STEP 2 — Sending to Gemini (gemini-flash-latest) for scoring")
+    print(f"  STEP 2 — Sending to Gemini (gemini-flash-lite-latest) for scoring")
     print(f"{'═'*60}")
 
     if not GEMINI_API_KEY:
@@ -448,7 +480,7 @@ def call_gemini(prompt: str) -> dict:
 
     try:
         response = client.models.generate_content(
-            model='gemini-flash-latest',
+            model='gemini-flash-lite-latest',
             contents=prompt,
             config=genai.types.GenerateContentConfig(
                 system_instruction=SCORING_SYSTEM_PROMPT,
