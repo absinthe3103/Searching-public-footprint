@@ -69,7 +69,9 @@ scheduler = AsyncIOScheduler()
 
 @app.on_event("startup")
 def start_scheduler():
+    scheduler.add_job(poll_vexa_for_completed_meetings, 'interval', minutes=2)
     scheduler.start()
+    print("[Scheduler] Started polling job for Vexa completed meetings (every 2 minutes).")
 
 @app.on_event("shutdown")
 def stop_scheduler():
@@ -603,11 +605,11 @@ def _transcribe_via_openrouter(audio_bytes: bytes, filename: str = "audio.webm")
                 "https://openrouter.ai/api/v1/audio/transcriptions",
                 headers={"Authorization": f"Bearer {api_key}"},
                 files={"file": (filename, f, "audio/webm")},
-                data={"model": os.getenv("OPENROUTER_STT_MODEL", "openai/whisper-1"), "response_format": "text"},
+                data={"model": os.getenv("OPENROUTER_STT_MODEL", "openai/whisper-1"), "response_format": "json"},
                 timeout=120
             )
         response.raise_for_status()
-        return response.text.strip()
+        return response.json().get("text", "").strip()
     finally:
         os.unlink(tmp_path)
 
@@ -615,7 +617,8 @@ def _transcribe_via_openrouter(audio_bytes: bytes, filename: str = "audio.webm")
 def _download_and_transcribe(session_uid: str) -> str:
     """
     Download all audio chunks for a recording session from MinIO,
-    concatenate them, and transcribe using Groq Whisper.
+    concatenate them, and transcribe using OpenRouter Whisper.
+    session_uid can be the full UUID or just the 8-character prefix.
     Returns the full transcript text.
     """
     from minio import Minio
@@ -654,6 +657,67 @@ def _download_and_transcribe(session_uid: str) -> str:
     transcript = _transcribe_via_openrouter(bytes(combined))
     print(f"[OpenRouter] Transcript: {transcript[:200]}..." if len(transcript) > 200 else f"[OpenRouter] Transcript: {transcript}")
     return transcript
+
+def poll_vexa_for_completed_meetings():
+    """
+    Background job that runs every 2 minutes to check for completed Vexa meetings.
+    Finds SCHEDULED interviews that correspond to completed bots, downloads audio
+    using the bot's session prefix, transcribes it, and saves it.
+    """
+    vexa_url = os.getenv("VEXA_API_URL")
+    vexa_key = os.getenv("VEXA_API_KEY")
+    if not vexa_url:
+        return
+
+    headers = {}
+    if vexa_key:
+        headers["X-API-Key"] = vexa_key
+
+    try:
+        r = requests.get(f"{vexa_url.rstrip('/')}/bots", headers=headers, timeout=10)
+        if r.status_code != 200:
+            return
+        
+        bots = r.json().get("meetings", [])
+        completed_bots = [b for b in bots if b.get("status") == "completed" and b.get("bot_container_id")]
+        
+        if not completed_bots:
+            return
+            
+        interviews = get_interviews()
+        scheduled_interviews = [i for i in interviews if i.get("status") == "SCHEDULED"]
+        
+        for bot in completed_bots:
+            native_id = bot.get("native_meeting_id")
+            container_id = bot.get("bot_container_id")  # e.g., mtg-20-73263e29
+            if not native_id or not container_id:
+                continue
+                
+            session_prefix = container_id.split("-")[-1]  # '73263e29'
+            
+            # Find matching scheduled interview
+            matching_interview = None
+            for interview in scheduled_interviews:
+                link = interview.get("google_meet_link", "")
+                if native_id in link:
+                    matching_interview = interview
+                    break
+            
+            if matching_interview:
+                interview_id = matching_interview["id"]
+                print(f"[Polling] Found completed bot for interview {interview_id}. Starting transcription...")
+                update_interview_status(interview_id, "PROCESSING")
+                
+                try:
+                    transcript = _download_and_transcribe(session_prefix)
+                    update_interview_status(interview_id, "COMPLETED", transcript_text=transcript or "[No speech detected]")
+                    print(f"[Polling] Transcript saved for interview {interview_id}")
+                except Exception as e:
+                    print(f"[Polling] Transcription failed for interview {interview_id}: {e}")
+                    update_interview_status(interview_id, "COMPLETED", transcript_text=f"[Transcription failed: {e}]")
+                    
+    except Exception as e:
+        print(f"[Polling] Failed to poll Vexa bots: {e}")
 
 
 @app.post("/interviews/webhook", tags=["Interviews"])

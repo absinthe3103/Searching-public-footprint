@@ -96,49 +96,49 @@ const DIMS = [
 
 // Full source list from V1 (IT + Marketing + HR + Design + Finance)
 const SOURCES = [
-  { key: 'github',          label: 'GitHub',         icon: 'ti-brand-github' },
-  { key: 'linkedin',        label: 'LinkedIn',       icon: 'ti-brand-linkedin' },
-  { key: 'google_scholar',  label: 'Scholar',        icon: 'ti-school' },
-  { key: 'researchgate',    label: 'ResearchGate',   icon: 'ti-file-text' },
-  { key: 'kaggle',          label: 'Kaggle',         icon: 'ti-chart-line' },
-  { key: 'devto',           label: 'Dev.to',         icon: 'ti-brand-deviantart' },
-  { key: 'medium',          label: 'Medium',         icon: 'ti-pencil' },
-  { key: 'hashnode',        label: 'Hashnode',       icon: 'ti-hash' },
-  { key: 'instagram',       label: 'Instagram',      icon: 'ti-brand-instagram' },
-  { key: 'tiktok',          label: 'TikTok',         icon: 'ti-brand-tiktok' },
-  { key: 'meta_ad_library', label: 'Meta Ads',       icon: 'ti-ad' },
-  { key: 'similarweb',      label: 'Similarweb',     icon: 'ti-chart-bar' },
-  { key: 'shrm',            label: 'SHRM',           icon: 'ti-certificate' },
-  { key: 'cipd',            label: 'CIPD',           icon: 'ti-certificate-2' },
-  { key: 'glassdoor',       label: 'Glassdoor',      icon: 'ti-star' },
-  { key: 'ssm_acra',        label: 'SSM/ACRA',       icon: 'ti-building-bank' },
-  { key: 'behance',         label: 'Behance',        icon: 'ti-brand-behance' },
-  { key: 'dribbble',        label: 'Dribbble',       icon: 'ti-brand-dribbble' },
-  { key: 'sc_mq',           label: 'Finance Lic.',   icon: 'ti-license' },
+  { key: 'github', label: 'GitHub', icon: 'ti-brand-github' },
+  { key: 'linkedin', label: 'LinkedIn', icon: 'ti-brand-linkedin' },
+  { key: 'google_scholar', label: 'Scholar', icon: 'ti-school' },
+  { key: 'researchgate', label: 'ResearchGate', icon: 'ti-file-text' },
+  { key: 'kaggle', label: 'Kaggle', icon: 'ti-chart-line' },
+  { key: 'devto', label: 'Dev.to', icon: 'ti-brand-deviantart' },
+  { key: 'medium', label: 'Medium', icon: 'ti-pencil' },
+  { key: 'hashnode', label: 'Hashnode', icon: 'ti-hash' },
+  { key: 'instagram', label: 'Instagram', icon: 'ti-brand-instagram' },
+  { key: 'tiktok', label: 'TikTok', icon: 'ti-brand-tiktok' },
+  { key: 'meta_ad_library', label: 'Meta Ads', icon: 'ti-ad' },
+  { key: 'similarweb', label: 'Similarweb', icon: 'ti-chart-bar' },
+  { key: 'shrm', label: 'SHRM', icon: 'ti-certificate' },
+  { key: 'cipd', label: 'CIPD', icon: 'ti-certificate-2' },
+  { key: 'glassdoor', label: 'Glassdoor', icon: 'ti-star' },
+  { key: 'ssm_acra', label: 'SSM/ACRA', icon: 'ti-building-bank' },
+  { key: 'behance', label: 'Behance', icon: 'ti-brand-behance' },
+  { key: 'dribbble', label: 'Dribbble', icon: 'ti-brand-dribbble' },
+  { key: 'sc_mq', label: 'Finance Lic.', icon: 'ti-license' },
 ]
 
 // Must match Backend/database/db.py CULTURE_DIMENSIONS exactly (same keys)
 const CULTURE_DIMENSIONS = [
   { key: 'innovation_risk_taking', label: 'Innovation & Risk Taking' },
-  { key: 'attention_to_detail',    label: 'Attention to Detail' },
-  { key: 'outcome_orientation',    label: 'Outcome Orientation' },
-  { key: 'people_orientation',     label: 'People Orientation' },
-  { key: 'team_orientation',       label: 'Team Orientation' },
-  { key: 'aggressiveness',         label: 'Aggressiveness' },
-  { key: 'stability',              label: 'Stability' },
+  { key: 'attention_to_detail', label: 'Attention to Detail' },
+  { key: 'outcome_orientation', label: 'Outcome Orientation' },
+  { key: 'people_orientation', label: 'People Orientation' },
+  { key: 'team_orientation', label: 'Team Orientation' },
+  { key: 'aggressiveness', label: 'Aggressiveness' },
+  { key: 'stability', label: 'Stability' },
 ] as const
 
 
 
 const USERNAME_FIELDS = [
-  { key: 'github_username',           label: 'GitHub',         icon: 'ti-brand-github',     placeholder: 'e.g. github.com/yourname',                         urlPattern: /github\.com\/([A-Za-z0-9_-]+)/ },
-  { key: 'linkedin_username',         label: 'LinkedIn',       icon: 'ti-brand-linkedin',   placeholder: 'e.g. linkedin.com/in/yourname',                     urlPattern: /(?:[a-z0-9\-]+\.)?linkedin\.com\/in\/([A-Za-z0-9_\-%]+)/i },
-  { key: 'google_scholar_identifier', label: 'Google Scholar', icon: 'ti-school',           placeholder: 'e.g. scholar.google.com/citations?user=yourname',   urlPattern: /scholar\.google\.com\/citations\?user=([A-Za-z0-9_-]+)/ },
-  { key: 'researchgate_identifier',   label: 'ResearchGate',   icon: 'ti-file-text',        placeholder: 'e.g. ORCID or researchgate.net/profile/yourname',   urlPattern: /researchgate\.net\/profile\/([A-Za-z0-9_.-]+)/ },
-  { key: 'kaggle_username',           label: 'Kaggle',         icon: 'ti-chart-line',       placeholder: 'e.g. kaggle.com/yourname',                          urlPattern: /kaggle\.com\/([A-Za-z0-9_-]+)/ },
-  { key: 'devto_username',            label: 'Dev.to',         icon: 'ti-brand-deviantart', placeholder: 'e.g. dev.to/yourname',                              urlPattern: /dev\.to\/([A-Za-z0-9_-]+)/ },
-  { key: 'medium_username',           label: 'Medium',         icon: 'ti-pencil',           placeholder: 'e.g. medium.com/@yourname',                         urlPattern: /medium\.com\/@?([A-Za-z0-9_.-]+)/ },
-  { key: 'hashnode_username',         label: 'Hashnode',       icon: 'ti-hash',             placeholder: 'e.g. hashnode.dev/yourname',                        urlPattern: /hashnode\.dev\/([A-Za-z0-9_-]+)/ },
+  { key: 'github_username', label: 'GitHub', icon: 'ti-brand-github', placeholder: 'e.g. github.com/yourname', urlPattern: /github\.com\/([A-Za-z0-9_-]+)/ },
+  { key: 'linkedin_username', label: 'LinkedIn', icon: 'ti-brand-linkedin', placeholder: 'e.g. linkedin.com/in/yourname', urlPattern: /(?:[a-z0-9\-]+\.)?linkedin\.com\/in\/([A-Za-z0-9_\-%]+)/i },
+  { key: 'google_scholar_identifier', label: 'Google Scholar', icon: 'ti-school', placeholder: 'e.g. scholar.google.com/citations?user=yourname', urlPattern: /scholar\.google\.com\/citations\?user=([A-Za-z0-9_-]+)/ },
+  { key: 'researchgate_identifier', label: 'ResearchGate', icon: 'ti-file-text', placeholder: 'e.g. ORCID or researchgate.net/profile/yourname', urlPattern: /researchgate\.net\/profile\/([A-Za-z0-9_.-]+)/ },
+  { key: 'kaggle_username', label: 'Kaggle', icon: 'ti-chart-line', placeholder: 'e.g. kaggle.com/yourname', urlPattern: /kaggle\.com\/([A-Za-z0-9_-]+)/ },
+  { key: 'devto_username', label: 'Dev.to', icon: 'ti-brand-deviantart', placeholder: 'e.g. dev.to/yourname', urlPattern: /dev\.to\/([A-Za-z0-9_-]+)/ },
+  { key: 'medium_username', label: 'Medium', icon: 'ti-pencil', placeholder: 'e.g. medium.com/@yourname', urlPattern: /medium\.com\/@?([A-Za-z0-9_.-]+)/ },
+  { key: 'hashnode_username', label: 'Hashnode', icon: 'ti-hash', placeholder: 'e.g. hashnode.dev/yourname', urlPattern: /hashnode\.dev\/([A-Za-z0-9_-]+)/ },
 ] as const
 
 type UsernameKey = typeof USERNAME_FIELDS[number]['key']
@@ -187,19 +187,19 @@ function drawRadar(canvas: HTMLCanvasElement, scores: DimensionScores) {
 
   ctx.clearRect(0, 0, size, size)
 
-  ;[0.25, 0.5, 0.75, 1.0].forEach(ring => {
-    ctx.beginPath()
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * 2 * Math.PI - Math.PI / 2
-      const x = cx + r * ring * Math.cos(a)
-      const y = cy + r * ring * Math.sin(a)
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
-    }
-    ctx.closePath()
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)'
-    ctx.lineWidth = 0.5
-    ctx.stroke()
-  })
+    ;[0.25, 0.5, 0.75, 1.0].forEach(ring => {
+      ctx.beginPath()
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * 2 * Math.PI - Math.PI / 2
+        const x = cx + r * ring * Math.cos(a)
+        const y = cy + r * ring * Math.sin(a)
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+      }
+      ctx.closePath()
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)'
+      ctx.lineWidth = 0.5
+      ctx.stroke()
+    })
 
   for (let i = 0; i < n; i++) {
     const a = (i / n) * 2 * Math.PI - Math.PI / 2
@@ -266,7 +266,7 @@ const SECTORS = {
 }
 
 export default function Page() {
-  const [view, setView] = useState<'search' | 'talent_radar' | 'preferences' | 'interviews'>('search')
+  const [view, setView] = useState<'search' | 'talent_radar' | 'preferences' | 'interviews' | 'about'>('search')
   const [interviewsList, setInterviewsList] = useState<any[]>([])
   const [showNewInterview, setShowNewInterview] = useState(false)
   const [newInterviewForm, setNewInterviewForm] = useState({ title: '', candidate_name: '', google_meet_link: '', date: '', scheduled_time: '', description: '' })
@@ -297,6 +297,25 @@ export default function Page() {
   // V1: AI backend selector
   const [backend, setBackend] = useState<'gemini' | 'ollama' | 'openrouter'>('gemini')
   const [fieldUrlHints, setFieldUrlHints] = useState<Record<string, boolean>>({})
+
+  // V2: About page state
+  const [openFaq, setOpenFaq] = useState<number | null>(null)
+  const aboutCanvasRef = useRef<HTMLCanvasElement>(null)
+
+  // Draw dummy radar for About page
+  useEffect(() => {
+    if (view === 'about' && aboutCanvasRef.current) {
+      setTimeout(() => {
+        if (aboutCanvasRef.current) {
+          drawRadar(aboutCanvasRef.current, {
+            technical_competency: 85, problem_solving: 90, communication: 75,
+            career_stability: 80, company_exposure: 70, academic_signal: 65,
+            initiative: 88, risk_indicators: 15, role_domain_relevance: 95
+          })
+        }
+      }, 50)
+    }
+  }, [view])
 
   // V2: Preferences page state
   const [culturePrefs, setCulturePrefs] = useState<Record<string, boolean>>({})
@@ -439,13 +458,13 @@ export default function Page() {
     try {
       const html2canvas = (await import('html2canvas')).default;
       const jsPDF = (await import('jspdf')).default;
-      
+
       const canvas = await html2canvas(element, { scale: 2 });
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      
+
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       pdf.save(`${cvResult?.name || 'Candidate'}_CV.pdf`);
     } catch (err) {
@@ -650,6 +669,12 @@ export default function Page() {
               >
                 Interviews
               </button>
+              <button
+                onClick={() => setView('about')}
+                style={{ background: view === 'about' ? 'var(--navy4)' : 'transparent', border: 'none', color: view === 'about' ? 'var(--gold2)' : 'var(--slate2)', padding: '8px 16px', borderRadius: 6, cursor: 'pointer', fontWeight: 500, fontSize: 12 }}
+              >
+                About Us
+              </button>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <span className="badge badge-gold">9 dimensions</span>
@@ -664,8 +689,105 @@ export default function Page() {
         {/* Body */}
         <div style={styles.body} className="layout-split">
 
-          {/* ── Preferences view (V2) ── */}
-          {view === 'preferences' ? (
+          {/* ── About view ── */}
+          {view === 'about' ? (
+            <div style={{ padding: '32px 48px', width: '100%', maxWidth: 1200, margin: '0 auto', overflowY: 'auto' }}>
+              <div style={{ marginBottom: 64, textAlign: 'center' }}>
+                <h2 style={{ fontSize: 40, fontWeight: 800, color: 'white', marginBottom: 16, letterSpacing: '-0.03em' }}>HireSystem <span style={{ color: 'var(--gold)' }}>AI</span></h2>
+                <p style={{ color: 'var(--slate2)', fontSize: 16, lineHeight: 1.6, maxWidth: 700, margin: '0 auto' }}>
+                  Revolutionizing technical recruitment through multidimensional digital footprint analysis and autonomous interviewing.
+                </p>
+              </div>
+
+              {/* Metrics Section */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, marginBottom: 64 }}>
+                {[
+                  { num: '9', label: 'Evaluated Dimensions' },
+                  { num: '10+', label: 'Integrated Platforms' },
+                  { num: '100%', label: 'Automated CV Gen' },
+                  { num: '0', label: 'Inherent Bias' }
+                ].map((m, i) => (
+                  <div key={i} style={{ background: 'var(--navy3)', padding: 24, borderRadius: 16, border: '1px solid rgba(255,255,255,0.05)', textAlign: 'center' }}>
+                    <div style={{ fontSize: 48, fontWeight: 800, color: 'var(--gold)', marginBottom: 8, textShadow: '0 0 20px rgba(201,168,76,0.4)' }}>{m.num}</div>
+                    <div style={{ fontSize: 13, color: 'var(--slate2)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{m.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Workflow Flowchart & Radar Demo side-by-side */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40, marginBottom: 64 }}>
+                <div style={{ background: 'var(--navy3)', padding: 32, borderRadius: 16, border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <h3 style={{ color: 'white', fontSize: 20, fontWeight: 700, marginBottom: 24 }}>How It Works</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--navy4)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gold)', fontWeight: 'bold' }}>1</div>
+                      <div style={{ flex: 1, background: 'var(--navy4)', padding: '12px 16px', borderRadius: 8, color: 'var(--slate2)', fontSize: 14, fontWeight: 500 }}>Input Candidate Links & JDs</div>
+                    </div>
+                    <div style={{ paddingLeft: 19, borderLeft: '2px dashed var(--gold)', margin: '-8px 0 -8px 19px', height: 24 }}></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--navy4)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gold)', fontWeight: 'bold' }}>2</div>
+                      <div style={{ flex: 1, background: 'var(--navy4)', padding: '12px 16px', borderRadius: 8, color: 'var(--slate2)', fontSize: 14, fontWeight: 500 }}>Scrape GitHub, LinkedIn, Scholar</div>
+                    </div>
+                    <div style={{ paddingLeft: 19, borderLeft: '2px dashed var(--gold)', margin: '-8px 0 -8px 19px', height: 24 }}></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--navy4)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gold)', fontWeight: 'bold' }}>3</div>
+                      <div style={{ flex: 1, background: 'var(--navy4)', padding: '12px 16px', borderRadius: 8, color: 'var(--slate2)', fontSize: 14, fontWeight: 500 }}>LLM Grading (Gemini / OpenRouter)</div>
+                    </div>
+                    <div style={{ paddingLeft: 19, borderLeft: '2px dashed var(--gold)', margin: '-8px 0 -8px 19px', height: 24 }}></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--navy4)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gold)', fontWeight: 'bold' }}>4</div>
+                      <div style={{ flex: 1, background: 'var(--navy4)', padding: '12px 16px', borderRadius: 8, color: 'var(--slate2)', fontSize: 14, fontWeight: 500 }}>Schedule Vexa Bot for Interview</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ background: 'var(--navy3)', padding: 32, borderRadius: 16, border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                  <h3 style={{ color: 'white', fontSize: 20, fontWeight: 700, marginBottom: 8, alignSelf: 'flex-start' }}>Live Radar Demo</h3>
+                  <p style={{ color: 'var(--slate2)', fontSize: 13, marginBottom: 32, alignSelf: 'flex-start' }}>Instantly visualize candidate strengths.</p>
+                  <canvas ref={aboutCanvasRef} width={280} height={280} style={{ display: 'block' }}></canvas>
+                </div>
+              </div>
+
+              {/* Collapsible FAQ */}
+              <div style={{ maxWidth: 800, margin: '0 auto', marginBottom: 64 }}>
+                <h3 style={{ fontSize: 24, fontWeight: 700, color: 'white', marginBottom: 24, textAlign: 'center' }}>Frequently Asked Questions</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {[
+                    { q: 'How does the AI Evaluation work?', a: 'We scrape public data using specialized APIs, aggregate the context, and feed it into advanced LLMs (Gemini Flash or OpenRouter) with a strict grading rubric. The model analyzes the evidence and outputs a score from 0-100 for each dimension.' },
+                    { q: 'Why did my bot fail to join the meeting?', a: 'There is a maximum concurrency limit of 5 active bots. If meetings hang in the \'requested\' state, they consume capacity. We automatically clean up stale bots, but ensure your scheduled times are accurate.' },
+                    { q: 'How are transcripts processed?', a: 'Audio is recorded in chunks, saved to a local MinIO bucket, and then retrieved by a background polling job. The audio is concatenated and sent to OpenRouter\'s high-performance Whisper endpoints. The resulting JSON transcript is attached to the candidate\'s profile.' }
+                  ].map((faq, i) => (
+                    <div key={i} style={{ background: 'var(--navy4)', borderRadius: 12, borderLeft: openFaq === i ? '4px solid var(--gold)' : '4px solid transparent', transition: 'all 0.2s', overflow: 'hidden' }}>
+                      <button 
+                        onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                        style={{ width: '100%', background: 'transparent', border: 'none', padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', color: 'white', fontSize: 15, fontWeight: 600, textAlign: 'left' }}
+                      >
+                        {faq.q}
+                        <i className={`ti ${openFaq === i ? 'ti-chevron-up' : 'ti-chevron-down'}`} style={{ color: 'var(--gold)', transition: 'transform 0.3s' }}></i>
+                      </button>
+                      <div style={{ padding: openFaq === i ? '0 24px 20px' : '0 24px', maxHeight: openFaq === i ? 200 : 0, opacity: openFaq === i ? 1 : 0, transition: 'all 0.3s ease-in-out', color: 'var(--slate2)', fontSize: 14, lineHeight: 1.6 }}>
+                        {faq.a}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* CTA Footer */}
+              <div style={{ background: 'linear-gradient(135deg, rgba(201,168,76,0.15) 0%, rgba(201,168,76,0.05) 100%)', padding: 48, borderRadius: 24, textAlign: 'center', border: '1px solid rgba(201,168,76,0.3)' }}>
+                <h3 style={{ fontSize: 28, fontWeight: 700, color: 'white', marginBottom: 16 }}>Ready to find your next great hire?</h3>
+                <p style={{ color: 'var(--slate2)', fontSize: 15, marginBottom: 32, maxWidth: 500, margin: '0 auto' }}>Experience the power of multidimensional AI screening and autonomous interviewing.</p>
+                <button 
+                  onClick={() => setView('search')}
+                  style={{ background: 'var(--gold)', color: 'var(--navy)', border: 'none', padding: '16px 32px', borderRadius: 8, fontSize: 16, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 16px rgba(201,168,76,0.3)' }}
+                >
+                  Start Your First Evaluation <i className="ti ti-arrow-right" style={{ marginLeft: 8 }}></i>
+                </button>
+              </div>
+            </div>
+
+            /* ── Preferences view (V2) ── */
+          ) : view === 'preferences' ? (
             <div style={{ padding: '24px 40px', width: '100%', maxWidth: 900, margin: '0 auto', overflowY: 'auto' }}>
               <h2 style={{ fontSize: 24, fontWeight: 600, color: 'white', marginBottom: 8 }}>Preferences</h2>
               <p style={{ color: 'var(--slate2)', fontSize: 13, marginBottom: 32 }}>
@@ -752,7 +874,7 @@ export default function Page() {
               )}
             </div>
 
-          /* ── Interviews view (V2) ── */
+            /* ── Interviews view (V2) ── */
           ) : view === 'interviews' ? (
             <div style={{ padding: '24px 40px', width: '100%', maxWidth: 1200, margin: '0 auto', overflowY: 'auto' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 }}>
@@ -769,15 +891,15 @@ export default function Page() {
                 <div style={{ background: 'var(--navy3)', border: '1px solid var(--border)', borderRadius: 8, padding: 20, marginBottom: 32 }}>
                   <h3 style={{ fontSize: 16, color: 'white', marginBottom: 16 }}>Schedule New Interview</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-                    <div><label className="field-label">Candidate Name</label><input className="field-input" value={newInterviewForm.candidate_name} onChange={e => setNewInterviewForm(f => ({...f, candidate_name: e.target.value}))} /></div>
-                    <div><label className="field-label">Interview Title</label><input className="field-input" value={newInterviewForm.title} onChange={e => setNewInterviewForm(f => ({...f, title: e.target.value}))} /></div>
-                    <div><label className="field-label">Google Meet Link</label><input className="field-input" value={newInterviewForm.google_meet_link} onChange={e => setNewInterviewForm(f => ({...f, google_meet_link: e.target.value}))} /></div>
+                    <div><label className="field-label">Candidate Name</label><input className="field-input" value={newInterviewForm.candidate_name} onChange={e => setNewInterviewForm(f => ({ ...f, candidate_name: e.target.value }))} /></div>
+                    <div><label className="field-label">Interview Title</label><input className="field-input" value={newInterviewForm.title} onChange={e => setNewInterviewForm(f => ({ ...f, title: e.target.value }))} /></div>
+                    <div><label className="field-label">Google Meet Link</label><input className="field-input" value={newInterviewForm.google_meet_link} onChange={e => setNewInterviewForm(f => ({ ...f, google_meet_link: e.target.value }))} /></div>
                     <div style={{ display: 'flex', gap: 16 }}>
-                      <div style={{ flex: 1 }}><label className="field-label">Date (YYYY-MM-DD)</label><input className="field-input" type="date" value={newInterviewForm.date} onChange={e => setNewInterviewForm(f => ({...f, date: e.target.value}))} /></div>
-                      <div style={{ flex: 1 }}><label className="field-label">Time</label><input className="field-input" type="time" value={newInterviewForm.scheduled_time} onChange={e => setNewInterviewForm(f => ({...f, scheduled_time: e.target.value}))} /></div>
+                      <div style={{ flex: 1 }}><label className="field-label">Date (YYYY-MM-DD)</label><input className="field-input" type="date" value={newInterviewForm.date} onChange={e => setNewInterviewForm(f => ({ ...f, date: e.target.value }))} /></div>
+                      <div style={{ flex: 1 }}><label className="field-label">Time</label><input className="field-input" type="time" value={newInterviewForm.scheduled_time} onChange={e => setNewInterviewForm(f => ({ ...f, scheduled_time: e.target.value }))} /></div>
                     </div>
                   </div>
-                  <div style={{ marginBottom: 16 }}><label className="field-label">Description</label><input className="field-input" value={newInterviewForm.description} onChange={e => setNewInterviewForm(f => ({...f, description: e.target.value}))} /></div>
+                  <div style={{ marginBottom: 16 }}><label className="field-label">Description</label><input className="field-input" value={newInterviewForm.description} onChange={e => setNewInterviewForm(f => ({ ...f, description: e.target.value }))} /></div>
                   <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
                     <button className="btn btn-ghost" onClick={() => setShowNewInterview(false)}>Cancel</button>
                     <button className="btn btn-primary" onClick={createInterview}>Schedule</button>
@@ -910,8 +1032,8 @@ export default function Page() {
                     </div>
                     <div>
                       {interview.status === 'COMPLETED' && (
-                        <button 
-                          className="btn btn-primary" 
+                        <button
+                          className="btn btn-primary"
                           style={{ padding: '6px 12px', fontSize: 12 }}
                           onClick={() => generateCV(interview.id)}
                           disabled={isGeneratingCV}
@@ -930,7 +1052,7 @@ export default function Page() {
               </div>
             </div>
 
-          /* ── Talent Radar view (V2 with preference badges) ── */
+            /* ── Talent Radar view (V2 with preference badges) ── */
           ) : view === 'talent_radar' ? (
             <div style={{ padding: '24px 40px', width: '100%', maxWidth: 1200, margin: '0 auto', overflowY: 'auto' }}>
               <h2 style={{ fontSize: 24, fontWeight: 600, color: 'white', marginBottom: 8 }}>Talent Radar</h2>
@@ -996,7 +1118,7 @@ export default function Page() {
               </div>
             </div>
 
-          /* ── Search / Evaluation view ── */
+            /* ── Search / Evaluation view ── */
           ) : (
             <>
               {/* ── Left panel ── */}
@@ -1194,9 +1316,9 @@ export default function Page() {
                   </label>
                   <div style={{ display: 'flex', gap: 6 }}>
                     {([
-                      { value: 'gemini',     label: 'Gemini',     icon: 'ti-sparkles', desc: 'Google Gemini Flash' },
-                      { value: 'ollama',     label: 'Ollama',     icon: 'ti-server',   desc: 'Local model' },
-                      { value: 'openrouter', label: 'OpenRouter', icon: 'ti-cloud',    desc: 'DeepSeek / Claude' },
+                      { value: 'gemini', label: 'Gemini', icon: 'ti-sparkles', desc: 'Google Gemini Flash' },
+                      { value: 'ollama', label: 'Ollama', icon: 'ti-server', desc: 'Local model' },
+                      { value: 'openrouter', label: 'OpenRouter', icon: 'ti-cloud', desc: 'DeepSeek / Claude' },
                     ] as const).map(opt => (
                       <button
                         key={opt.value}
@@ -1219,8 +1341,8 @@ export default function Page() {
                     ))}
                   </div>
                   <div style={{ marginTop: 6, fontSize: 10, color: 'var(--muted)', textAlign: 'center' }}>
-                    {backend === 'gemini'     && 'Requires GEMINI_API_KEY in .env'}
-                    {backend === 'ollama'     && 'Local — make sure ollama is running + model pulled'}
+                    {backend === 'gemini' && 'Requires GEMINI_API_KEY in .env'}
+                    {backend === 'ollama' && 'Local — make sure ollama is running + model pulled'}
                     {backend === 'openrouter' && 'Requires OPENROUTER_API_KEY in .env'}
                   </div>
                 </div>
