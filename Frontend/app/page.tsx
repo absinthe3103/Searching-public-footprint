@@ -266,7 +266,12 @@ const SECTORS = {
 }
 
 export default function Page() {
-  const [view, setView] = useState<'search' | 'talent_radar' | 'preferences'>('search')
+  const [view, setView] = useState<'search' | 'talent_radar' | 'preferences' | 'interviews'>('search')
+  const [interviewsList, setInterviewsList] = useState<any[]>([])
+  const [showNewInterview, setShowNewInterview] = useState(false)
+  const [newInterviewForm, setNewInterviewForm] = useState({ title: '', candidate_name: '', google_meet_link: '', date: '', scheduled_time: '', description: '' })
+  const [cvResult, setCvResult] = useState<any>(null)
+  const [isGeneratingCV, setIsGeneratingCV] = useState(false)
   const [candidateName, setCandidateName] = useState('')
   const [originalRole, setOriginalRole] = useState('Senior Backend Engineer')
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false)
@@ -386,6 +391,68 @@ export default function Page() {
       console.error('Failed to remove university', e)
     }
   }, [])
+
+  /* V2: Interviews handlers */
+  const fetchInterviews = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/interviews`)
+      if (res.ok) setInterviewsList(await res.json())
+    } catch (e) { console.error('Failed to fetch interviews', e) }
+  }, [])
+
+  const createInterview = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/interviews`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newInterviewForm)
+      })
+      if (res.ok) {
+        setShowNewInterview(false)
+        setNewInterviewForm({ title: '', candidate_name: '', google_meet_link: '', date: '', scheduled_time: '', description: '' })
+        fetchInterviews()
+      }
+    } catch (e) { console.error('Failed to create interview', e) }
+  }, [newInterviewForm, fetchInterviews])
+
+  const generateCV = useCallback(async (interviewId: number) => {
+    setIsGeneratingCV(true)
+    setCvResult(null)
+    try {
+      const res = await fetch(`${API_URL}/interviews/generate-cv`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ interview_id: interviewId })
+      })
+      if (res.ok) {
+        setCvResult(await res.json())
+      } else {
+        alert("Failed to generate CV. Is transcript available?")
+      }
+    } catch (e) { console.error(e) }
+    finally { setIsGeneratingCV(false) }
+  }, [])
+
+  const downloadPDF = useCallback(async () => {
+    const element = document.getElementById('cv-pdf-content');
+    if (!element) return;
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const jsPDF = (await import('jspdf')).default;
+      
+      const canvas = await html2canvas(element, { scale: 2 });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`${cvResult?.name || 'Candidate'}_CV.pdf`);
+    } catch (err) {
+      console.error('PDF generation error:', err);
+      alert('Failed to download PDF. Please try again.');
+    }
+  }, [cvResult]);
 
   /* evaluation — includes V1 backend param + V2 university/summaryProfile */
   const runEval = useCallback(async () => {
@@ -577,6 +644,12 @@ export default function Page() {
               >
                 Preferences
               </button>
+              <button
+                onClick={() => { setView('interviews'); fetchInterviews() }}
+                style={{ background: view === 'interviews' ? 'var(--navy4)' : 'transparent', border: 'none', color: view === 'interviews' ? 'var(--gold2)' : 'var(--slate2)', padding: '8px 16px', borderRadius: 6, cursor: 'pointer', fontWeight: 500, fontSize: 12 }}
+              >
+                Interviews
+              </button>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <span className="badge badge-gold">9 dimensions</span>
@@ -677,6 +750,184 @@ export default function Page() {
                   </div>
                 </div>
               )}
+            </div>
+
+          /* ── Interviews view (V2) ── */
+          ) : view === 'interviews' ? (
+            <div style={{ padding: '24px 40px', width: '100%', maxWidth: 1200, margin: '0 auto', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 }}>
+                <div>
+                  <h2 style={{ fontSize: 24, fontWeight: 600, color: 'white', marginBottom: 8 }}>Interviews</h2>
+                  <p style={{ color: 'var(--slate2)', fontSize: 13 }}>Manage interview sessions, bots, and generate CVs.</p>
+                </div>
+                <button onClick={() => setShowNewInterview(true)} className="btn btn-primary" style={{ padding: '8px 16px', borderRadius: 8 }}>
+                  + New Interview
+                </button>
+              </div>
+
+              {showNewInterview && (
+                <div style={{ background: 'var(--navy3)', border: '1px solid var(--border)', borderRadius: 8, padding: 20, marginBottom: 32 }}>
+                  <h3 style={{ fontSize: 16, color: 'white', marginBottom: 16 }}>Schedule New Interview</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                    <div><label className="field-label">Candidate Name</label><input className="field-input" value={newInterviewForm.candidate_name} onChange={e => setNewInterviewForm(f => ({...f, candidate_name: e.target.value}))} /></div>
+                    <div><label className="field-label">Interview Title</label><input className="field-input" value={newInterviewForm.title} onChange={e => setNewInterviewForm(f => ({...f, title: e.target.value}))} /></div>
+                    <div><label className="field-label">Google Meet Link</label><input className="field-input" value={newInterviewForm.google_meet_link} onChange={e => setNewInterviewForm(f => ({...f, google_meet_link: e.target.value}))} /></div>
+                    <div style={{ display: 'flex', gap: 16 }}>
+                      <div style={{ flex: 1 }}><label className="field-label">Date (YYYY-MM-DD)</label><input className="field-input" type="date" value={newInterviewForm.date} onChange={e => setNewInterviewForm(f => ({...f, date: e.target.value}))} /></div>
+                      <div style={{ flex: 1 }}><label className="field-label">Time</label><input className="field-input" type="time" value={newInterviewForm.scheduled_time} onChange={e => setNewInterviewForm(f => ({...f, scheduled_time: e.target.value}))} /></div>
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: 16 }}><label className="field-label">Description</label><input className="field-input" value={newInterviewForm.description} onChange={e => setNewInterviewForm(f => ({...f, description: e.target.value}))} /></div>
+                  <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                    <button className="btn btn-ghost" onClick={() => setShowNewInterview(false)}>Cancel</button>
+                    <button className="btn btn-primary" onClick={createInterview}>Schedule</button>
+                  </div>
+                </div>
+              )}
+
+              {cvResult && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 1000, display: 'flex', flexDirection: 'column', padding: 40, overflowY: 'auto' }}>
+                  <div style={{ background: 'white', color: 'black', width: '100%', maxWidth: 800, margin: '0 auto', borderRadius: 8, padding: '40px 48px', fontFamily: 'Arial, sans-serif' }} id="cv-pdf-content">
+                    {/* === NAME HEADER === */}
+                    <h1 style={{ fontSize: 30, fontWeight: 800, color: '#1a1a2e', marginBottom: 4 }}>{cvResult.name}</h1>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, fontSize: 13, color: '#333', marginBottom: 16, borderBottom: '2px solid #1a1a2e', paddingBottom: 10 }}>
+                      {cvResult.phone && <span>{cvResult.phone}</span>}
+                      {cvResult.phone && cvResult.email && <span>|</span>}
+                      {cvResult.email && <span>{cvResult.email}</span>}
+                      {cvResult.linkedin && <><span>|</span><a href={cvResult.linkedin} style={{ color: '#0066cc' }}>LinkedIn</a></>}
+                      {cvResult.github && <><span>|</span><a href={cvResult.github} style={{ color: '#0066cc' }}>Github</a></>}
+                    </div>
+
+                    {/* === PROFESSIONAL SUMMARY === */}
+                    {cvResult.summary && (<>
+                      <h2 style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 6 }}>Professional Summary</h2>
+                      <p style={{ fontSize: 13, lineHeight: 1.6, color: '#222', marginBottom: 16, borderBottom: '1px solid #ccc', paddingBottom: 12 }}>{cvResult.summary}</p>
+                    </>)}
+
+                    {/* === EDUCATION === */}
+                    {cvResult.education?.length > 0 && (<>
+                      <h2 style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 8 }}>Education</h2>
+                      <div style={{ marginBottom: 16, borderBottom: '1px solid #ccc', paddingBottom: 12 }}>
+                        {cvResult.education.map((edu: any, i: number) => (
+                          <div key={i} style={{ marginBottom: 10 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                              <span style={{ fontWeight: 700, fontSize: 14 }}>{edu.degree}</span>
+                              <span style={{ fontSize: 12, color: '#555' }}>{edu.start_date}{edu.end_date ? ` – ${edu.end_date}` : ''}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#333' }}>
+                              <span>{edu.institution}</span>
+                              <span>{edu.location}</span>
+                            </div>
+                            {edu.cgpa && <div style={{ fontSize: 12, color: '#555', marginTop: 2 }}>CGPA: {edu.cgpa}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    </>)}
+
+                    {/* === COMPETITION === */}
+                    {cvResult.competitions?.length > 0 && (<>
+                      <h2 style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 8 }}>Competition</h2>
+                      <div style={{ marginBottom: 16, borderBottom: '1px solid #ccc', paddingBottom: 12 }}>
+                        {cvResult.competitions.map((comp: any, i: number) => (
+                          <div key={i} style={{ marginBottom: 12 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                              <span style={{ fontWeight: 700, fontSize: 14 }}>{comp.name}</span>
+                              <span style={{ fontSize: 12, color: '#555' }}>{comp.date}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#333', marginBottom: 4 }}>
+                              <span>{comp.role}</span>
+                              <span>{comp.location}</span>
+                            </div>
+                            {comp.project && <div style={{ fontSize: 13, color: '#333', marginBottom: 4 }}>Project: {comp.project}</div>}
+                            <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                              {comp.bullets?.map((b: string, j: number) => (
+                                <li key={j} style={{ fontSize: 13, color: '#222', lineHeight: 1.6, marginBottom: 2 }}>{b}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    </>)}
+
+                    {/* === PROJECTS === */}
+                    {cvResult.projects?.length > 0 && (<>
+                      <h2 style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 8 }}>Project</h2>
+                      <div style={{ marginBottom: 16, borderBottom: '1px solid #ccc', paddingBottom: 12 }}>
+                        {cvResult.projects.map((proj: any, i: number) => (
+                          <div key={i} style={{ marginBottom: 12 }}>
+                            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>
+                              {proj.name}{proj.tech_stack ? <span style={{ fontWeight: 400, fontSize: 13 }}> | {proj.tech_stack}</span> : ''}
+                            </div>
+                            <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                              {proj.bullets?.map((b: string, j: number) => (
+                                <li key={j} style={{ fontSize: 13, color: '#222', lineHeight: 1.6, marginBottom: 2 }}>{b}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    </>)}
+
+                    {/* === ACADEMIC AWARDS === */}
+                    {cvResult.academic_awards?.length > 0 && (<>
+                      <h2 style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 8 }}>Academic Award</h2>
+                      <div style={{ marginBottom: 16, borderBottom: '1px solid #ccc', paddingBottom: 12 }}>
+                        {cvResult.academic_awards.map((award: string, i: number) => (
+                          <div key={i} style={{ fontWeight: 700, fontSize: 13, marginBottom: 2 }}>{award}</div>
+                        ))}
+                      </div>
+                    </>)}
+
+                    {/* === TECHNICAL SKILLS === */}
+                    {cvResult.technical_skills && (<>
+                      <h2 style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 8 }}>Technical Skills</h2>
+                      <div style={{ fontSize: 13, lineHeight: 1.8 }}>
+                        {cvResult.technical_skills.languages && <div><strong>Languages</strong> | {cvResult.technical_skills.languages}</div>}
+                        {cvResult.technical_skills.frameworks && <div><strong>Frameworks</strong> | {cvResult.technical_skills.frameworks}</div>}
+                        {cvResult.technical_skills.developer_tools && <div><strong>Developer Tools</strong> | {cvResult.technical_skills.developer_tools}</div>}
+                        {cvResult.technical_skills.libraries && <div><strong>Libraries</strong> | {cvResult.technical_skills.libraries}</div>}
+                      </div>
+                    </>)}
+                  </div>
+                  <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginTop: 24 }}>
+                    <button className="btn btn-ghost" style={{ background: 'white', color: 'black' }} onClick={() => setCvResult(null)}>Close</button>
+                    <button className="btn btn-primary" onClick={downloadPDF}>Download PDF</button>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {interviewsList.map(interview => (
+                  <div key={interview.id} style={{ background: 'var(--navy3)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 4 }}>
+                        <h4 style={{ fontSize: 16, color: 'white', fontWeight: 600 }}>{interview.candidate_name}</h4>
+                        <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 12, background: interview.status === 'COMPLETED' ? 'rgba(46, 204, 113, 0.1)' : 'rgba(201,168,76,0.1)', color: interview.status === 'COMPLETED' ? 'var(--green)' : 'var(--gold2)' }}>
+                          {interview.status}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: 12, color: 'var(--slate2)' }}>{interview.title} • {interview.date} {interview.scheduled_time} • {interview.google_meet_link}</p>
+                    </div>
+                    <div>
+                      {interview.status === 'COMPLETED' && (
+                        <button 
+                          className="btn btn-primary" 
+                          style={{ padding: '6px 12px', fontSize: 12 }}
+                          onClick={() => generateCV(interview.id)}
+                          disabled={isGeneratingCV}
+                        >
+                          {isGeneratingCV ? 'Generating...' : 'Generate CV'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {interviewsList.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--slate2)' }}>
+                    No interviews scheduled yet.
+                  </div>
+                )}
+              </div>
             </div>
 
           /* ── Talent Radar view (V2 with preference badges) ── */
@@ -1529,7 +1780,6 @@ export default function Page() {
                             <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>AI-generated Candidate Summary</div>
                             <div style={{ fontSize: 11, color: 'var(--slate)', marginTop: 1 }}>Powered by your chosen AI model</div>
                           </div>
-                          <span className="badge" style={{ marginLeft: 'auto', fontSize: 9, padding: '2px 8px', background: 'rgba(201,168,76,0.08)', border: '0.5px solid var(--gold-dim)', color: 'var(--gold-dim)' }}>Coming soon</span>
                         </div>
                         <div style={result.executive_summary ? { padding: '8px 4px' } : styles.aiSummaryPlaceholder}>
                           {result.executive_summary ? (

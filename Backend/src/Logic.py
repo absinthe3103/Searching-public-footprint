@@ -27,8 +27,13 @@ Response:
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from datetime import datetime
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import sys
 import os
+import requests
+import json
+import tempfile
 from typing import Any
 
 _BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -40,6 +45,7 @@ from db import (
     get_all_candidates, get_candidate_by_id,
     get_culture_preferences, set_culture_preferences, CULTURE_DIMENSIONS,
     get_preferred_universities, add_preferred_university, delete_preferred_university,
+    get_interviews, create_interview, update_interview_status, get_interview_by_id
 )
 
 # ──────────────────────────────────────────────────────────
@@ -58,6 +64,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+scheduler = AsyncIOScheduler()
+
+@app.on_event("startup")
+def start_scheduler():
+    scheduler.start()
+
+@app.on_event("shutdown")
+def stop_scheduler():
+    scheduler.shutdown()
 
 
 # ──────────────────────────────────────────────────────────
@@ -83,8 +99,8 @@ class EvaluateRequest(BaseModel):
     google_scholar_identifier:  str | None = None
     researchgate_identifier:    str | None = None
 
-    class Config:
-        json_schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "candidate_name":   "Andrew Ng",
                 "original_role":    "Senior Research Scientist",
@@ -100,6 +116,7 @@ class EvaluateRequest(BaseModel):
                 "linkedin_username": "andrewyng"
             }
         }
+    }
 
 
 class DimensionScores(BaseModel):
@@ -213,6 +230,34 @@ class PreferredUniversityRow(BaseModel):
     id:         int
     name:       str
     created_at: str
+
+
+class NewInterview(BaseModel):
+    title: str
+    candidate_name: str
+    google_meet_link: str
+    date: str
+    scheduled_time: str
+    description: str = ""
+
+
+class InterviewRow(BaseModel):
+    id: int
+    title: str
+    description: str | None
+    candidate_name: str
+    google_meet_link: str | None
+    scheduled_time: str | None
+    date: str | None
+    status: str
+    transcript_text: str | None
+    generated_cv_url: str | None
+    created_at: str
+
+
+class VexaWebhookPayload(BaseModel):
+    meet_url: str
+    transcript: str
 
 
 # ──────────────────────────────────────────────────────────
@@ -348,6 +393,7 @@ async def evaluate(req: EvaluateRequest):
         whats_changed_summary=scores.get("whats_changed_summary"),
         re_engage_flag=scores.get("re_engage_flag"),
         status=scores.get("status"),
+        executive_summary=scores.get("executive_summary"),
         possible_profiles=possible_profiles,
     )
 
@@ -451,8 +497,366 @@ def remove_preferred_university(university_id: int):
 
 
 # ──────────────────────────────────────────────────────────
+# INTERVIEWS
+# ──────────────────────────────────────────────────────────
+
+@app.get("/interviews", response_model=list[InterviewRow], tags=["Interviews"])
+def list_interviews():
+    """Return all interviews for the dashboard."""
+    return get_interviews()
+
+
+def trigger_vexa_bot(meeting_url: str):
+    """Fired by the scheduler to make Vexa join the Google Meet"""
+    vexa_url = os.getenv("VEXA_API_URL")
+    vexa_key = os.getenv("VEXA_API_KEY")
+    
+    if not vexa_url or not meeting_url:
+        return
+
+    # Extract meeting ID from URL (e.g. https://meet.google.com/abc-defg-hij -> abc-defg-hij)
+    native_meeting_id = meeting_url.split('/')[-1].split('?')[0]
+
+    try:
+        # Vexa documented API schema
+        payload = {
+            "platform": "google_meet",
+            "native_meeting_id": native_meeting_id,
+            "bot_name": "HireSystem Note Taker",
+            "webhook_url": "http://host.docker.internal:8000/interviews/webhook"
+        }
+        headers = {
+            'Content-Type': 'application/json'
+        }
+        if vexa_key:
+            headers["X-API-Key"] = vexa_key
+            
+        response = requests.post(
+            f"{vexa_url.rstrip('/')}/bots", 
+            json=payload,
+            headers=headers,
+            timeout=10
+        )
+        print(f"Vexa Scheduled Trigger: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"Warning: Failed to trigger Vexa API - {e}")
+
+
+@app.post("/interviews", response_model=InterviewRow, tags=["Interviews"])
+def add_interview(body: NewInterview):
+    """Schedule a new interview and set the Vexa bot alarm."""
+    new_id = create_interview(
+        title=body.title,
+        candidate_name=body.candidate_name,
+        google_meet_link=body.google_meet_link,
+        date=body.date,
+        scheduled_time=body.scheduled_time,
+        description=body.description
+    )
+    row = get_interview_by_id(new_id)
+    
+    # Trigger Vexa automatically at the scheduled date & time
+    if body.google_meet_link and body.date and body.scheduled_time:
+        try:
+            # Parse 'YYYY-MM-DD' and 'HH:MM' into a python datetime object
+            date_str = f"{body.date} {body.scheduled_time}"
+            target_time = datetime.strptime(date_str, "%Y-%m-%d %H:%M")
+            
+            # If the time is already in the past, trigger now. Otherwise, schedule it.
+            if target_time <= datetime.now():
+                trigger_vexa_bot(body.google_meet_link)
+            else:
+                scheduler.add_job(
+                    trigger_vexa_bot, 
+                    'date', 
+                    run_date=target_time, 
+                    args=[body.google_meet_link]
+                )
+                print(f"Scheduled Vexa bot to join {body.google_meet_link} at {target_time}")
+        except Exception as e:
+            print(f"Failed to parse time or schedule bot: {e}")
+
+    return row
+
+
+from fastapi import Request
+from fastapi.concurrency import run_in_threadpool
+
+def _transcribe_via_openrouter(audio_bytes: bytes, filename: str = "audio.webm") -> str:
+    """
+    Send raw audio bytes to OpenRouter's STT endpoint (routed to OpenAI Whisper).
+    Uses OPENROUTER_API_KEY from the environment.
+    NOTE: OpenRouter requires the model to be namespaced e.g. 'openai/whisper-1',
+    NOT just 'whisper-1', otherwise you get silent 404s.
+    """
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENROUTER_API_KEY is not set in environment")
+    
+    with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
+        tmp.write(audio_bytes)
+        tmp_path = tmp.name
+    
+    try:
+        with open(tmp_path, "rb") as f:
+            response = requests.post(
+                "https://openrouter.ai/api/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                files={"file": (filename, f, "audio/webm")},
+                data={"model": os.getenv("OPENROUTER_STT_MODEL", "openai/whisper-1"), "response_format": "text"},
+                timeout=120
+            )
+        response.raise_for_status()
+        return response.text.strip()
+    finally:
+        os.unlink(tmp_path)
+
+
+def _download_and_transcribe(session_uid: str) -> str:
+    """
+    Download all audio chunks for a recording session from MinIO,
+    concatenate them, and transcribe using Groq Whisper.
+    Returns the full transcript text.
+    """
+    from minio import Minio
+    
+    # MinIO connection settings (from Vexa's docker-compose defaults)
+    minio_endpoint = os.getenv("MINIO_ENDPOINT", "localhost:9000")
+    minio_access   = os.getenv("MINIO_ACCESS_KEY", "vexa-access-key")
+    minio_secret   = os.getenv("MINIO_SECRET_KEY", "vexa-secret-key")
+    minio_bucket   = os.getenv("MINIO_BUCKET", "vexa")
+    
+    client = Minio(minio_endpoint, access_key=minio_access, secret_key=minio_secret, secure=False)
+    
+    # List all objects whose name contains the session_uid
+    print(f"[MinIO] Searching for recording chunks with session_uid={session_uid}")
+    objects = list(client.list_objects(minio_bucket, recursive=True))
+    chunks = sorted(
+        [o for o in objects if session_uid in o.object_name],
+        key=lambda o: o.object_name
+    )
+    
+    if not chunks:
+        print(f"[MinIO] No chunks found for session {session_uid}")
+        return ""
+    
+    print(f"[MinIO] Found {len(chunks)} chunk(s): {[c.object_name for c in chunks]}")
+    
+    # Download and concatenate all chunks
+    combined = bytearray()
+    for chunk_obj in chunks:
+        data = client.get_object(minio_bucket, chunk_obj.object_name)
+        chunk_bytes = data.read()
+        combined.extend(chunk_bytes)
+        print(f"[MinIO] Downloaded chunk {chunk_obj.object_name} ({len(chunk_bytes)} bytes)")
+    
+    print(f"[MinIO] Total audio size: {len(combined)} bytes — sending to OpenRouter Whisper...")
+    transcript = _transcribe_via_openrouter(bytes(combined))
+    print(f"[OpenRouter] Transcript: {transcript[:200]}..." if len(transcript) > 200 else f"[OpenRouter] Transcript: {transcript}")
+    return transcript
+
+
+@app.post("/interviews/webhook", tags=["Interviews"])
+async def vexa_webhook(request: Request, background_tasks: BackgroundTasks):
+    """
+    Webhook endpoint for Vexa. When a meeting ends, Vexa posts here.
+    We extract the recording session UID, download audio from MinIO,
+    transcribe with Groq Whisper, and save the transcript to DB.
+    """
+    payload_dict = await request.json()
+    print("================ WEBHOOK RECEIVED ================")
+    print(json.dumps(payload_dict, indent=2))
+    print("==================================================")
+    
+    # --- Extract key fields from Vexa's payload ---
+    # Meet URL (try multiple possible field names)
+    meet_url = (
+        payload_dict.get("meet_url")
+        or payload_dict.get("meeting_url")
+        or payload_dict.get("meetingUrl")
+        or payload_dict.get("constructed_meeting_url")
+    )
+    if not meet_url and "data" in payload_dict:
+        meet_url = (
+            payload_dict["data"].get("meeting_url")
+            or payload_dict["data"].get("meet_url")
+            or payload_dict["data"].get("constructed_meeting_url")
+        )
+
+    # Recording session UID — present in Vexa's completion payload
+    session_uid = payload_dict.get("session_uid") or payload_dict.get("recording_session_uid")
+    if not session_uid and "data" in payload_dict:
+        sessions = payload_dict["data"].get("sessions", [])
+        if sessions:
+            session_uid = sessions[0]  # Use the first session
+    if not session_uid and "sessions" in payload_dict:
+        sessions = payload_dict.get("sessions", [])
+        if sessions:
+            session_uid = sessions[0]
+
+    # Transcript (if Vexa somehow produced one)
+    transcript = payload_dict.get("transcript") or payload_dict.get("text")
+    if not transcript and "data" in payload_dict:
+        transcript = payload_dict["data"].get("transcript") or payload_dict["data"].get("text")
+
+    print(f"[Webhook] meet_url={meet_url}, session_uid={session_uid}, has_transcript={bool(transcript)}")
+
+    # --- Find the matching interview in DB ---
+    interviews = get_interviews()
+    target_interview = None
+
+    if meet_url:
+        # Normalize URL for comparison (strip https://, trailing slashes)
+        clean_url = meet_url.replace("https://", "").replace("http://", "").rstrip("/")
+        for interview in interviews:
+            link = (interview.get("google_meet_link") or "").replace("https://", "").replace("http://", "").rstrip("/")
+            if link == clean_url and interview.get("status") == "SCHEDULED":
+                target_interview = interview
+                break
+
+    if not target_interview:
+        # Fallback: pick the most recent SCHEDULED interview
+        scheduled = [i for i in interviews if i.get("status") == "SCHEDULED"]
+        if scheduled:
+            target_interview = scheduled[-1]
+            print(f"[Webhook] Matched by fallback to interview id={target_interview['id']}")
+
+    if not target_interview:
+        raise HTTPException(status_code=404, detail="Matching scheduled interview not found.")
+
+    interview_id = target_interview["id"]
+
+    # --- If no transcript from Vexa, download audio from MinIO and transcribe with Groq ---
+    if not transcript and session_uid:
+        print(f"[Webhook] No transcript from Vexa. Downloading audio (session={session_uid}) for Groq transcription...")
+        update_interview_status(interview_id, "PROCESSING")
+        
+        def do_transcription():
+            try:
+                text = _download_and_transcribe(session_uid)
+                update_interview_status(interview_id, "COMPLETED", transcript_text=text or "[No speech detected]")
+                print(f"[Webhook] Transcript saved for interview {interview_id}")
+            except Exception as e:
+                print(f"[Webhook] Transcription failed: {e}")
+                update_interview_status(interview_id, "COMPLETED", transcript_text=f"[Transcription failed: {e}]")
+        
+        background_tasks.add_task(do_transcription)
+        return {"status": "processing", "message": f"Downloading and transcribing audio for interview {interview_id}"}
+    
+    # --- Vexa provided a transcript directly — save it ---
+    final_transcript = transcript if transcript else json.dumps(payload_dict)
+    update_interview_status(interview_id, "COMPLETED", transcript_text=final_transcript)
+    return {"status": "ok", "message": f"Transcript saved for interview {interview_id}"}
+
+
+class GenerateResumeRequest(BaseModel):
+    interview_id: int
+
+@app.post("/interviews/generate-cv", tags=["Interviews"])
+def generate_cv(req: GenerateResumeRequest):
+    """
+    Given a completed interview ID, take its transcript and ask the LLM to structure it into a CV JSON.
+    """
+    row = get_interview_by_id(req.interview_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Interview not found")
+    if not row.get("transcript_text"):
+        raise HTTPException(status_code=400, detail="No transcript available for this interview")
+        
+    import json as _json
+    
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="OPENROUTER_API_KEY not configured")
+
+    prompt = f"""You are a professional CV/Resume writer. Extract ALL information from the transcript below and return a structured JSON.
+Return ONLY a raw JSON object — no markdown, no code blocks, no explanation.
+
+JSON structure to follow EXACTLY:
+{{
+  "name": "Full legal name",
+  "phone": "Phone number if mentioned, else empty string",
+  "email": "Email address if mentioned, else empty string",
+  "linkedin": "LinkedIn URL or username if mentioned, else empty string",
+  "github": "GitHub URL or username if mentioned, else empty string",
+  "summary": "3-4 sentence professional summary. Mention their year of study, degree, university, CGPA, passion areas, key skills, and career goal.",
+  "education": [
+    {{
+      "degree": "Full degree title e.g. Bachelor Degree of Software Engineering",
+      "institution": "University name",
+      "start_date": "Month Year e.g. June 2024",
+      "end_date": "Month Year or Current e.g. June 2027 (Current)",
+      "location": "City, Country e.g. Selangor, Malaysia",
+      "cgpa": "CGPA value e.g. 3.48"
+    }}
+  ],
+  "competitions": [
+    {{
+      "name": "Competition name",
+      "date": "Month Year",
+      "location": "Location",
+      "role": "Participant or Team Lead etc",
+      "project": "Project name if any",
+      "bullets": ["Achievement or responsibility 1", "Achievement or responsibility 2"]
+    }}
+  ],
+  "projects": [
+    {{
+      "name": "Project name",
+      "tech_stack": "Technologies used e.g. FastAPI, Next.js, Docker",
+      "bullets": ["What was built or achieved 1", "What was built or achieved 2", "What was built or achieved 3"]
+    }}
+  ],
+  "academic_awards": ["Award 1", "Award 2"],
+  "technical_skills": {{
+    "languages": "e.g. Python, JavaScript, Java",
+    "frameworks": "e.g. FastAPI, React, Next.js",
+    "developer_tools": "e.g. Git, Docker, VS Code",
+    "libraries": "e.g. Pandas, NumPy, LangChain"
+  }}
+}}
+
+CANDIDATE NAME: {row.get('candidate_name')}
+
+TRANSCRIPT:
+{row.get('transcript_text')}
+
+IMPORTANT RULES:
+- Extract every project, technology, skill, and achievement the candidate mentioned.
+- If they mention building a system or app, add it to projects with detailed bullet points.
+- For education, infer reasonable start/end dates based on what they say.
+- technical_skills must be comma-separated strings in each category.
+- competitions and academic_awards can be empty arrays [] if none mentioned.
+- If a field is unknown, use an empty string or empty array.
+- Return ONLY the raw JSON object."""
+
+    try:
+        resp = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "http://localhost:3000",
+                "X-Title": "HireSystem"
+            },
+            json={
+                "model": os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini"),
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.1,
+                "response_format": {"type": "json_object"}
+            },
+            timeout=60
+        )
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
+        return _json.loads(content)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"LLM generation failed: {str(e)}")
+
+
+# ──────────────────────────────────────────────────────────
 # RUN
 # ──────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("logic:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("Logic:app", host="0.0.0.0", port=8000, reload=True)

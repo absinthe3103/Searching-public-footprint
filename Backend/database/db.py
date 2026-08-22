@@ -84,6 +84,27 @@ def init_db():
         conn.commit()
 
 
+def init_interviews_table():
+    """Create the interviews table if it doesn't exist."""
+    with get_connection() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS interviews (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                title             TEXT NOT NULL,
+                description       TEXT,
+                candidate_name    TEXT NOT NULL,
+                google_meet_link  TEXT,
+                scheduled_time    TEXT,
+                date              TEXT,
+                status            TEXT DEFAULT 'SCHEDULED',
+                transcript_text   TEXT,
+                generated_cv_url  TEXT,
+                created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+
+
 def init_preferences_tables():
     """Create the culture_preferences (singleton) and preferred_universities
     tables if they don't exist."""
@@ -281,6 +302,48 @@ def delete_candidate(candidate_id: int) -> bool:
         return cursor.rowcount > 0
 
 
+def get_interviews() -> list:
+    """Return all interviews, ordered by date descending."""
+    with get_connection() as conn:
+        rows = conn.execute("SELECT * FROM interviews ORDER BY date DESC, scheduled_time DESC").fetchall()
+        return [dict(row) for row in rows]
+
+
+def get_interview_by_id(interview_id: int) -> dict | None:
+    with get_connection() as conn:
+        row = conn.execute("SELECT * FROM interviews WHERE id = ?", (interview_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def create_interview(title: str, candidate_name: str, google_meet_link: str, 
+                     date: str, scheduled_time: str, description: str = "") -> int:
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """INSERT INTO interviews (title, description, candidate_name, google_meet_link, date, scheduled_time) 
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (title, description, candidate_name, google_meet_link, date, scheduled_time)
+        )
+        conn.commit()
+        return cursor.lastrowid
+
+
+def update_interview_status(interview_id: int, status: str, transcript_text: str = None) -> bool:
+    with get_connection() as conn:
+        if transcript_text is not None:
+            cursor = conn.execute(
+                "UPDATE interviews SET status = ?, transcript_text = ? WHERE id = ?",
+                (status, transcript_text, interview_id)
+            )
+        else:
+            cursor = conn.execute(
+                "UPDATE interviews SET status = ? WHERE id = ?",
+                (status, interview_id)
+            )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
 # Auto-init on import
 init_db()
 init_preferences_tables()
+init_interviews_table()
