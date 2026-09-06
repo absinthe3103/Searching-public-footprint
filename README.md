@@ -78,14 +78,18 @@ python test.py --mock-only --github "username"
 cd Testing\src
 
 python test_url_searching.py --verbose --live
+<<<<<<< HEAD
 
 ## Testing for resume generator backend API
 pytest -s -v Testing/src/test_resume_generator.py
+=======
+>>>>>>> ab22461 (update README)
 ___________________________________________________
 # Full test
 python test.py --github "u1" --linkedin "u2" --req "Python" --req "ML"
 
 '''
+<<<<<<< HEAD
 
 ## Testing for test_preferences_talent_radar.py
 ```
@@ -96,6 +100,8 @@ Add `--seed-candidates` to also insert four deterministic test candidates direct
 ```
 python test_preferences_talent_radar.py --seed-candidates
 ```
+=======
+>>>>>>> ab22461 (update README)
 
 ## Learn More
 
