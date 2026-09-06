@@ -60,6 +60,15 @@ python test.py --mock-only --github "username"
 # Full test
 python test.py --github "u1" --linkedin "u2" --req "Python" --req "ML"
 ```
+________________________________________________________________________________________________
+
+
+## Testing fro andidateSeacher.py
+
+cd Testing\src
+
+python test_url_searching.py --verbose --live
+________________________________________________________________________________________________
 
 ## Learn More
 
