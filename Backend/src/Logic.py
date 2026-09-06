@@ -28,7 +28,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.schedulers.background import BackgroundScheduler
 import sys
 import os
 import requests
@@ -65,7 +65,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-scheduler = AsyncIOScheduler()
+scheduler = BackgroundScheduler()
 
 @app.on_event("startup")
 def start_scheduler():
@@ -779,10 +779,10 @@ async def vexa_webhook(request: Request, background_tasks: BackgroundTasks):
                 break
 
     if not target_interview:
-        # Fallback: pick the most recent SCHEDULED interview
+        # Fallback: pick the most recent SCHEDULED interview (index 0 since DB sorts DESC)
         scheduled = [i for i in interviews if i.get("status") == "SCHEDULED"]
         if scheduled:
-            target_interview = scheduled[-1]
+            target_interview = scheduled[0]
             print(f"[Webhook] Matched by fallback to interview id={target_interview['id']}")
 
     if not target_interview:
