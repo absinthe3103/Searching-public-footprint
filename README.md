@@ -43,6 +43,22 @@ ollama pull qwen2.5:14b
 
 ________________________________________________________________________________________________
 
+## Vexa Bot Installation (for Interview Transcriptions)
+To enable the AI Resume Generator and interview transcriptions, you must install the Vexa bot and host it locally using Docker.
+
+1. Clone the Vexa repository:
+   ```bash
+   git clone https://github.com/vexa-ai/vexa.git
+   cd vexa
+   ```
+2. Start the services using Docker Compose (or your local Docker VM):
+   ```bash
+   docker-compose up -d
+   ```
+3. Ensure you update the `.env` file in this project with your local VM's IP address (e.g., `VEXA_API_URL=http://<YOUR_VM_IP>:18056` and `MINIO_ENDPOINT=<YOUR_VM_IP>:9000`).
+
+________________________________________________________________________________________________
+
 ## Testing Program
 
 # One name for all
@@ -62,6 +78,9 @@ python test.py --mock-only --github "username"
 cd Testing\src
 
 python test_url_searching.py --verbose --live
+
+## Testing for resume generator backend API
+pytest -s -v Testing/src/test_resume_generator.py
 ___________________________________________________
 # Full test
 python test.py --github "u1" --linkedin "u2" --req "Python" --req "ML"
