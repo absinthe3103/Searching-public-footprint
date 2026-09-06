@@ -87,6 +87,16 @@ python test.py --github "u1" --linkedin "u2" --req "Python" --req "ML"
 
 '''
 
+## Testing for test_preferences_talent_radar.py
+```
+cd Testing\src
+python test_preferences_talent_radar.py
+```
+Add `--seed-candidates` to also insert four deterministic test candidates directly into the database (bypassing `/evaluate`, so no AI key or live search needed) and verify Talent Radar sorting/matching logic against known expected results. These are automatically deleted afterward.
+```
+python test_preferences_talent_radar.py --seed-candidates
+```
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
